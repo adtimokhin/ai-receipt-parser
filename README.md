@@ -1,0 +1,94 @@
+# receipt-parser-backend
+
+receipt-parser-backend is an async FastAPI microservice generated from the platform
+boilerplate.
+
+## Requirements
+
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/)
+- Docker (optional, for the container and compose stack)
+
+## Setup
+
+```bash
+uv lock          # first time, and after any dependency change
+uv sync          # create .venv and install everything
+cp .env.example .env
+```
+
+`uv.lock` is committed. CI runs `uv sync --locked`.
+
+## Run
+
+```bash
+uv run fastapi dev receipt_parser_backend/main.py     # local, with reload
+uv run uvicorn receipt_parser_backend.main:app        # production-style
+```
+
+- `GET /` - service identity
+- `GET /health/live` - liveness, no dependency checks
+- `GET /health/ready` - readiness, aggregates all registered checks
+
+Every request gets an `X-Request-ID` (generated when absent) that is echoed on
+the response and attached to every log line.
+
+## Test
+
+```bash
+uv run pytest
+```
+
+## Lint, format, and type-check
+
+```bash
+uv run ruff format .        # apply the formatter
+uv run ruff format --check . # verify only (what CI runs)
+uv run ruff check .
+uv run mypy
+```
+
+## Git hooks
+
+A pre-commit hook runs `ruff format` and `ruff check` on staged Python and
+**blocks the commit** if anything is not formatted or lints dirty (same ruff as
+CI, from `uv.lock`). It is installed for you when you generate into an existing
+git repo; otherwise activate it once:
+
+```bash
+uv run pre-commit install
+uv run pre-commit run --all-files   # check everything now
+```
+
+## Claude Code hooks
+
+`.claude/hooks/` holds vendored [Claude Code hooks](https://github.com/karanb192/claude-code-hooks)
+(MIT) wired by `.claude/settings.json`: dev-safety guardrails and auto-format.
+They need `node >=18` on `PATH` and fail open if it is missing. See
+`.claude/hooks/VENDORED.md`. Change which hooks are active with `copier update`
+(the `hook_*` answers), not by hand-editing `settings.json`.
+
+
+## Container
+
+```bash
+docker compose up --build
+```
+
+The compose stack builds the `runtime` image target and runs the app with a
+`/health/live` healthcheck.
+## Updating from the template
+
+This project keeps `.copier-answers.yml` so it can pull template
+changes:
+
+```bash
+copier update
+uv lock && uv sync
+```
+
+Never edit `.copier-answers.yml` by hand.
+
+## License
+
+Proprietary and confidential.

@@ -1,0 +1,35 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/format-code.js\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-pack.js\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|Read|Edit|MultiEdit|Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/protect-tests.js\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|Edit|MultiEdit|Write"
+      }
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+"""Chat-model factory + a sample summarize chain.
+
+``build_chat_model`` picks the provider from whichever ``APP_LLM_*_API_KEY`` is
+set. Tests patch this function to return a
+``FakeListChatModel`` so the chain runs offline and deterministically (D-013).
+"""
+
+from __future__ import annotations
+
+from langchain_core.language_models import BaseChatModel
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable
+
+from receipt_parser_backend.config import get_settings
+
+_SUMMARIZE_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", "Summarize the user's text in exactly one sentence."),
+        ("user", "{text}"),
+    ]
+)
+
+
+def build_chat_model() -> BaseChatModel:
+    settings = get_settings()
+    if settings.llm_openai_api_key:
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=settings.llm_openai_model,
+            api_key=settings.llm_openai_api_key,
+            temperature=0,
+            base_url=settings.llm_openai_base_url,
+        )
+    raise RuntimeError("no LLM provider API key configured for LangChain")
+
+
+def summarize_chain() -> Runnable[dict[str, str], str]:
+    return _SUMMARIZE_PROMPT | build_chat_model() | StrOutputParser()
