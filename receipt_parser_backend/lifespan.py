@@ -25,9 +25,16 @@ SHUTDOWN_HOOKS: list[LifecycleHook] = []
 
 
 async def _db_mongodb_startup(app: FastAPI) -> None:
+    import structlog
+
     from receipt_parser_backend.db.mongodb.client import init_client
+    from receipt_parser_backend.db.mongodb.collections import ensure_indexes
 
     app.state.db_mongodb = init_client()
+    try:
+        await ensure_indexes()
+    except Exception as exc:  # bootstrap is best-effort; readiness reports the truth
+        structlog.get_logger(__name__).warning("db_mongodb.ensure_indexes_failed", error=repr(exc))
 
 
 async def _db_mongodb_shutdown(app: FastAPI) -> None:

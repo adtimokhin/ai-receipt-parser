@@ -20,6 +20,8 @@ to the previous plain ``APIRouter()``.
 from fastapi import APIRouter
 from fastapi.params import Depends
 
+from receipt_parser_backend.telegram.routes import router as telegram_router
+
 from .routes import root
 
 # Overlays needing a dependency applied to every api_router route append to
@@ -31,17 +33,4 @@ _api_router_dependencies: list[Depends] = []
 
 api_router = APIRouter(dependencies=_api_router_dependencies)
 api_router.include_router(root.router)
-
-
-def _include_overlay_routers() -> None:
-    """Attach overlay-contributed routers. Body assembled at render time."""
-    from receipt_parser_backend.llm.openai.routes import router as _llm_openai_router
-
-    api_router.include_router(_llm_openai_router)
-
-    from receipt_parser_backend.langchain.routes import router as _langchain_router
-
-    api_router.include_router(_langchain_router)
-
-
-_include_overlay_routers()
+api_router.include_router(telegram_router)

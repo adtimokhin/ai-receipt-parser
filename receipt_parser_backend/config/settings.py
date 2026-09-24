@@ -46,6 +46,24 @@ class Settings(BaseSettings):
     blob_storage_bucket: str = "receipt-parser-backend"
     blob_storage_region: str = "us-east-1"
 
+    # --- telegram --------------------------------------------------------------
+    telegram_bot_token: str
+    telegram_webhook_secret: str
+    # Comma-separated Telegram user IDs, e.g. "123,456". Kept as a plain string
+    # field (see telegram_whitelist_ids below) so pydantic-settings never tries
+    # to JSON-decode it as a complex env value.
+    telegram_whitelist: str = ""
+
+    # --- llamaextract ------------------------------------------------------------
+    llamaextract_api_key: str
+    llamaextract_agent_name: str = "receipt-parser"
+
+    @property
+    def telegram_whitelist_ids(self) -> list[int]:
+        """Parsed whitelist (spec 4.1)."""
+
+        return [int(item) for item in self.telegram_whitelist.split(",") if item.strip()]
+
 
 @lru_cache
 def get_settings() -> Settings:

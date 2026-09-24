@@ -1,15 +1,13 @@
 """Proves the llm_openai overlay is wired into the running app (overlay-contract 7).
 
-Runs offline: an httpx2 ``MockTransport`` (or a local stub server when
-``llm_response_mode == 'fake_server'``) returns canned Chat Completions JSON, so
-the sample summarize call and the readiness check exercise the real wiring with
-no network and no real API key.
+Runs offline: an httpx2 ``MockTransport`` returns canned Chat Completions JSON,
+so the readiness check exercises the real wiring with no network and no real
+API key. The reply interpreter (spec 9.2) lands on this client in Milestone 5.
 """
 
 from __future__ import annotations
 
 from openai import AsyncOpenAI
-from starlette.testclient import TestClient
 
 
 async def test_llm_openai_boots(openai_client: object) -> None:
@@ -26,24 +24,3 @@ async def test_llm_openai_boots(openai_client: object) -> None:
 
         result = await check_llm_openai()
         assert result.healthy, result
-
-
-def test_llm_openai_summarize_route(openai_client: object, client: TestClient) -> None:
-    response = client.post("/llm/openai/summarize", json={"text": "a longer piece of text"})
-    assert response.status_code == 200
-    body = response.json()
-    assert isinstance(body["summary"], str)
-    assert body["summary"]
-
-
-def test_llm_openai_summarize_operation_in_openapi(
-    openai_client: object, client: TestClient
-) -> None:
-    schema = client.get("/openapi.json").json()
-    op_ids = {
-        methods[verb]["operationId"]
-        for methods in schema["paths"].values()
-        for verb in methods
-        if "operationId" in methods[verb]
-    }
-    assert "llm_openai_summarize" in op_ids

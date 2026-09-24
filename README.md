@@ -1,7 +1,8 @@
 # receipt-parser-backend
 
-receipt-parser-backend is an async FastAPI microservice generated from the platform
-boilerplate.
+A single-user Telegram bot that turns receipt files into structured records.
+See `../receipt-parser-state-machine.md` for the full spec and
+`../coding-agent-prompt.md` for the build process this repo follows.
 
 ## Requirements
 
@@ -18,6 +19,39 @@ cp .env.example .env
 ```
 
 `uv.lock` is committed. CI runs `uv sync --locked`.
+
+## Configuration
+
+All settings are environment variables with an `APP_` prefix (see
+`.env.example` for the full list and local-dev defaults):
+
+- `APP_DB_MONGODB_*` - MongoDB connection (sessions, user settings, receipts).
+- `APP_LLM_OPENAI_*` - OpenAI client, used by the reply interpreter (spec 9.2).
+- `APP_BLOB_STORAGE_*` - S3-compatible client for original/preprocessed
+  receipt files. Local dev points at the `minio` compose service; production
+  points at [Cloudflare R2](https://developers.cloudflare.com/r2/) (S3-compatible).
+- `APP_TELEGRAM_BOT_TOKEN` / `APP_TELEGRAM_WEBHOOK_SECRET` - bot credentials.
+  The webhook secret is compared against Telegram's
+  `X-Telegram-Bot-Api-Secret-Token` header on every incoming update.
+- `APP_TELEGRAM_WHITELIST` - comma-separated Telegram user IDs allowed to use
+  the bot. Updates from anyone else are dropped (spec 4.1).
+- `APP_LLAMAEXTRACT_*` - LlamaExtract credentials used for receipt extraction
+  (spec 9.1). Jobs are submitted with `do_not_cache=True` so files are never
+  retained on LlamaCloud (design rule 6).
+
+## Country profiles
+
+Country-specific behavior (date/decimal formats, tax model, extraction and
+interpreter prompts) lives in
+`receipt_parser_backend/countries/registry.py`, one `CountryProfile` per
+supported country. v1 ships `US` and `FR`. Adding a country means adding a
+profile there — pipeline code never branches on country code directly (spec
+Section 5, design rule 5).
+
+## Telegram bot setup
+
+Webhook registration and the ingress endpoint land in a later milestone; this
+section will document `setWebhook` and secret-token setup once they exist.
 
 ## Run
 
@@ -68,7 +102,6 @@ They need `node >=18` on `PATH` and fail open if it is missing. See
 `.claude/hooks/VENDORED.md`. Change which hooks are active with `copier update`
 (the `hook_*` answers), not by hand-editing `settings.json`.
 
-
 ## Container
 
 ```bash
@@ -77,6 +110,7 @@ docker compose up --build
 
 The compose stack builds the `runtime` image target and runs the app with a
 `/health/live` healthcheck.
+
 ## Updating from the template
 
 This project keeps `.copier-answers.yml` so it can pull template

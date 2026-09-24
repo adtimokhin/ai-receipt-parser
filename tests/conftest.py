@@ -19,6 +19,9 @@ from starlette.testclient import TestClient
 # override via ``monkeypatch.setenv``. Needed because some overlay boots tests
 # import the app at module scope, which builds ``Settings()`` before fixtures run.
 os.environ.setdefault("APP_LLM_OPENAI_API_KEY", "test-collection-placeholder")
+os.environ.setdefault("APP_TELEGRAM_BOT_TOKEN", "test-collection-placeholder")
+os.environ.setdefault("APP_TELEGRAM_WEBHOOK_SECRET", "test-collection-placeholder")
+os.environ.setdefault("APP_LLAMAEXTRACT_API_KEY", "test-collection-placeholder")
 
 
 @pytest.fixture
@@ -123,30 +126,6 @@ def openai_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[object]:
     monkeypatch.setattr(client_mod, "init_client", _fake_init)
     try:
         yield client_mod
-    finally:
-        get_settings.cache_clear()
-
-
-@pytest.fixture(autouse=True)
-def langchain_llm(monkeypatch: pytest.MonkeyPatch) -> Iterator[object]:
-    """Offline LangChain: the chat-model factory returns a FakeListChatModel (D-013).
-
-    No provider key, no network. Autouse so every test in a langchain-enabled
-    project gets the deterministic model.
-    """
-    from langchain_core.language_models import FakeListChatModel
-
-    from receipt_parser_backend.langchain import chain as chain_mod
-
-    fake = FakeListChatModel(responses=["This is a deterministic test summary."])
-    monkeypatch.setattr(chain_mod, "build_chat_model", lambda: fake)
-    monkeypatch.setenv("APP_LLM_OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("APP_LLM_ANTHROPIC_API_KEY", "test-key")
-    from receipt_parser_backend.config import get_settings
-
-    get_settings.cache_clear()
-    try:
-        yield fake
     finally:
         get_settings.cache_clear()
 
