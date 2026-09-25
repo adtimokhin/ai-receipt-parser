@@ -17,6 +17,8 @@ dependencies = [
     "aioboto3==15.5.0",
     "httpx==0.28.1",
     "llama-cloud==2.16.0",
+    "reportlab==5.0.1",
+    "pypdf==6.19.0",
 ]
 
 [dependency-groups]

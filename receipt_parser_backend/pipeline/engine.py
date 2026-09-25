@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Coroutine
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import structlog
@@ -47,8 +47,9 @@ from receipt_parser_backend.receipts.models import (
     TotalCheck,
     UserSettings,
 )
+from receipt_parser_backend.reports.builder import build_report_pdf
 from receipt_parser_backend.sessions import repository
-from receipt_parser_backend.telegram.client import download_file, send_message
+from receipt_parser_backend.telegram.client import download_file, send_document, send_message
 
 logger = structlog.get_logger(__name__)
 
@@ -72,6 +73,22 @@ def _now() -> datetime:
 def _build_r2_key(user_id: int, mime_type: str) -> str:
     extension = ALLOWED_MIME_TYPES.get(mime_type, "bin")
     return f"receipts/{user_id}/{uuid.uuid4().hex}/original.{extension}"
+
+
+def _parse_report_range(args: str) -> tuple[date, date] | None:
+    """Parse ``"YYYY-MM-DD YYYY-MM-DD"``. None on anything malformed or out of order."""
+
+    parts = args.split()
+    if len(parts) != 2:
+        return None
+    try:
+        start_date = date.fromisoformat(parts[0])
+        end_date = date.fromisoformat(parts[1])
+    except ValueError:
+        return None
+    if start_date > end_date:
+        return None
+    return start_date, end_date
 
 
 def _log_interpretation(
@@ -160,6 +177,8 @@ class ReceiptPipeline:
             await self._cmd_last(user_id, session)
         elif command == "/undo":
             await self._cmd_undo(user_id, session)
+        elif command == "/report":
+            await self._cmd_report(user_id, args, session)
         else:
             await self._reply(user_id, messages.UNKNOWN_COMMAND)
 
@@ -265,6 +284,41 @@ class ReceiptPipeline:
             messages.undo_confirm_prompt(receipt.merchant_name, receipt.total, receipt.currency),
         )
 
+    async def _cmd_report(self, user_id: int, args: str, session: Session) -> None:
+        if session.state != SessionState.IDLE:
+            await self._reply(user_id, messages.invalid_state_reply("/report", "while idle"))
+            return
+
+        parsed = _parse_report_range(args)
+        if parsed is None:
+            await self._reply(user_id, messages.REPORT_USAGE)
+            return
+        start_date, end_date = parsed
+
+        receipts = await repository.get_categorized_receipts_in_range(
+            user_id, start_date.isoformat(), end_date.isoformat()
+        )
+        if not receipts:
+            await self._reply(user_id, messages.report_no_receipts(start_date, end_date))
+            return
+
+        try:
+            pdf_bytes = await build_report_pdf(
+                receipts, start_date.isoformat(), end_date.isoformat()
+            )
+        except Exception as exc:
+            logger.warning("report.build_failed", user_id=user_id, error=repr(exc))
+            await self._reply(user_id, messages.REPORT_FAILED)
+            return
+
+        filename = f"529-report-{start_date.isoformat()}-to-{end_date.isoformat()}.pdf"
+        await send_document(
+            user_id,
+            filename,
+            pdf_bytes,
+            caption=messages.report_ready(start_date, end_date, len(receipts)),
+        )
+
     # --- non-command messages (spec Section 7 table) ------------------------
 
     async def handle_text(self, user_id: int, text: str) -> None:
@@ -336,7 +390,7 @@ class ReceiptPipeline:
         session.raw_extraction = {}
         session.question_queue = []
         session.current_question = None
-        session.r2_keys = R2Keys(original=r2_key)
+        session.r2_keys = R2Keys(original=r2_key, original_content_type=mime_type)
         await repository.save_session(session)
         await self._reply(user_id, messages.PROCESSING_STARTED)
 
@@ -568,12 +622,14 @@ class ReceiptPipeline:
             total_source=draft.total_source,
             total_check=draft.total_check,
             notes=draft.notes,
+            category=draft.category,
             files=ReceiptFiles(
                 # Set in handle_document (spec Step 1.4) before extraction was
                 # even submitted; empty only if a session was hand-built
                 # without going through intake (e.g. some tests).
                 original_r2_key=session.r2_keys.original or "",
                 preprocessed_r2_key=session.r2_keys.preprocessed,
+                original_content_type=session.r2_keys.original_content_type,
             ),
             raw_extraction=session.raw_extraction,
             created_at=_now(),

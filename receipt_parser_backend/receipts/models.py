@@ -40,6 +40,11 @@ class R2Keys(BaseModel):
 
     original: str | None = None
     preprocessed: str | None = None
+    # The original's content type, carried from intake (Step 1.3) through to
+    # the persisted Receipt - the /report builder needs to know whether to
+    # embed a receipt as an image or merge it in as a PDF, and re-deriving
+    # that from the R2 key's filename would be more fragile than just storing it.
+    original_content_type: str | None = None
 
 
 class Item(BaseModel):
@@ -86,6 +91,11 @@ class Draft(BaseModel):
     total_source: Literal["extracted", "user"] | None = None
     total_check: TotalCheck | None = None
     notes: list[str] = Field(default_factory=list)
+    # Not part of the original spec - added for the 529 report (vendor/type/
+    # total). Optional and user-set only (never inferred): "room" for rent,
+    # "board" for groceries/meal plans. Left null, a receipt simply doesn't
+    # appear in a /report.
+    category: Literal["room", "board"] | None = None
 
 
 class Session(BaseModel):
@@ -114,6 +124,7 @@ class ReceiptFiles(BaseModel):
 
     original_r2_key: str
     preprocessed_r2_key: str | None = None
+    original_content_type: str | None = None
 
 
 class Receipt(BaseModel):
@@ -133,6 +144,7 @@ class Receipt(BaseModel):
     total_source: Literal["extracted", "user"] | None = None
     total_check: TotalCheck | None = None
     notes: list[str] = Field(default_factory=list)
+    category: Literal["room", "board"] | None = None
     files: ReceiptFiles
     raw_extraction: Document = Field(default_factory=dict)
     created_at: datetime

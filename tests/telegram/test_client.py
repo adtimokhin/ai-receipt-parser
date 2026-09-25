@@ -90,3 +90,76 @@ async def test_set_my_commands_raises_on_http_error(
 
     with pytest.raises(httpx.HTTPStatusError):
         await set_my_commands()
+
+
+async def test_send_document_posts_the_file_and_caption(
+    telegram_client: list[dict[str, object]],
+) -> None:
+    import httpx
+
+    from receipt_parser_backend.telegram import client as client_mod
+    from receipt_parser_backend.telegram.client import send_document
+
+    captured: list[httpx.Request] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json={"ok": True, "result": {}})
+
+    client_mod._client = httpx.AsyncClient(
+        base_url="https://api.telegram.org/bottest-token", transport=httpx.MockTransport(_handler)
+    )
+
+    await send_document(42, "report.pdf", b"%PDF-fake-bytes", caption="Here is your report")
+
+    assert len(captured) == 1
+    request = captured[0]
+    assert request.url.path.endswith("/sendDocument")
+    body = request.content
+    assert b'name="chat_id"' in body
+    assert b"42" in body
+    assert b'filename="report.pdf"' in body
+    assert b"%PDF-fake-bytes" in body
+    assert b"Here is your report" in body
+
+
+async def test_send_document_without_a_caption_omits_it(
+    telegram_client: list[dict[str, object]],
+) -> None:
+    import httpx
+
+    from receipt_parser_backend.telegram import client as client_mod
+    from receipt_parser_backend.telegram.client import send_document
+
+    captured: list[httpx.Request] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json={"ok": True, "result": {}})
+
+    client_mod._client = httpx.AsyncClient(
+        base_url="https://api.telegram.org/bottest-token", transport=httpx.MockTransport(_handler)
+    )
+
+    await send_document(42, "report.pdf", b"%PDF-fake-bytes")
+
+    assert b'name="caption"' not in captured[0].content
+
+
+async def test_send_document_raises_on_http_error(
+    telegram_client: list[dict[str, object]],
+) -> None:
+    import httpx
+
+    from receipt_parser_backend.telegram import client as client_mod
+    from receipt_parser_backend.telegram.client import send_document
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"ok": False, "description": "bad request"})
+
+    client_mod._client = httpx.AsyncClient(
+        base_url="https://api.telegram.org/bottest-token", transport=httpx.MockTransport(_handler)
+    )
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await send_document(42, "report.pdf", b"%PDF-fake-bytes")

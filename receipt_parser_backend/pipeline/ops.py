@@ -26,10 +26,20 @@ ALLOWED_INTENTS_BY_STATE: dict[SessionState, frozenset[str]] = {
 }
 
 _ITEM_PATH_RE = re.compile(r"^items\[(\d+)\]\.(name|price)$")
-_SIMPLE_PATHS = {"merchant_name", "currency", "date", "time", "discounts", "tax", "total"}
+_SIMPLE_PATHS = {
+    "merchant_name",
+    "currency",
+    "date",
+    "time",
+    "discounts",
+    "tax",
+    "total",
+    "category",
+}
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _TIME_RE = re.compile(r"^\d{2}:\d{2}$")
 _CURRENCY_RE = re.compile(r"^[A-Za-z]{3}$")
+_CATEGORIES = {"room", "board"}
 
 
 @dataclass(frozen=True)
@@ -104,6 +114,8 @@ def _set_op_is_valid(op: SetOp, *, item_count: int) -> bool:
         return isinstance(op.value, str) and bool(_CURRENCY_RE.match(op.value))
     if op.path in ("discounts", "tax", "total"):
         return _is_non_negative_number(op.value)
+    if op.path == "category":
+        return isinstance(op.value, str) and op.value.strip().lower() in _CATEGORIES
     return isinstance(op.value, str)  # merchant_name
 
 
@@ -161,6 +173,9 @@ def _apply_set(draft: Draft, op: SetOp) -> None:
         draft.total = float(op.value)
         draft.total_source = "user"
         _clear_total_override(draft)
+    elif op.path == "category":
+        assert isinstance(op.value, str)
+        draft.category = op.value.strip().lower()  # type: ignore[assignment]
 
 
 def _clear_total_override(draft: Draft) -> None:

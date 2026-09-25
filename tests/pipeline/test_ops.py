@@ -306,3 +306,53 @@ def test_setting_an_unrelated_field_does_not_clear_the_override() -> None:
     assert updated.total_check is not None
     assert updated.total_check.status == "user_override"
     assert updated.notes != []
+
+
+# --- category (529 report field) ---------------------------------------------
+
+
+def test_category_room_is_valid() -> None:
+    output = InterpreterOutput(intent="edit", ops=[SetOp(op="set", path="category", value="room")])
+    result = validate_interpreter_output(
+        output, state=SessionState.AWAITING_CONFIRMATION, active_question=None, item_count=0
+    )
+    assert result.intent == "edit"
+
+
+def test_category_board_is_valid() -> None:
+    output = InterpreterOutput(intent="edit", ops=[SetOp(op="set", path="category", value="board")])
+    result = validate_interpreter_output(
+        output, state=SessionState.AWAITING_CONFIRMATION, active_question=None, item_count=0
+    )
+    assert result.intent == "edit"
+
+
+def test_category_is_case_insensitive() -> None:
+    output = InterpreterOutput(intent="edit", ops=[SetOp(op="set", path="category", value="ROOM")])
+    result = validate_interpreter_output(
+        output, state=SessionState.AWAITING_CONFIRMATION, active_question=None, item_count=0
+    )
+    assert result.intent == "edit"
+
+
+def test_category_rejects_anything_other_than_room_or_board() -> None:
+    output = InterpreterOutput(
+        intent="edit", ops=[SetOp(op="set", path="category", value="restaurant")]
+    )
+    result = validate_interpreter_output(
+        output, state=SessionState.AWAITING_CONFIRMATION, active_question=None, item_count=0
+    )
+    assert result.intent == "unclear"
+
+
+def test_apply_set_category() -> None:
+    draft = _draft(category=None)
+    updated = apply_ops(draft, [SetOp(op="set", path="category", value="room")])
+    assert updated.category == "room"
+    assert draft.category is None  # original untouched
+
+
+def test_apply_set_category_normalizes_case() -> None:
+    draft = _draft(category=None)
+    updated = apply_ops(draft, [SetOp(op="set", path="category", value="Board")])
+    assert updated.category == "board"

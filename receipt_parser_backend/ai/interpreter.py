@@ -29,15 +29,16 @@ class SetOp(BaseModel):
     path: str = Field(
         description=(
             "The field to update. Must be one of: merchant_name, currency, "
-            "date, time, items[n].name, items[n].price, discounts, tax, total "
-            "- where n is a zero-based index into the current item list."
+            "date, time, items[n].name, items[n].price, discounts, tax, total, "
+            "category - where n is a zero-based index into the current item list."
         )
     )
     value: str | float = Field(
         description=(
             "The new value, already in canonical form matching the field's "
             "type: an ISO 8601 date ('YYYY-MM-DD'), a 24-hour 'HH:MM' time, a "
-            "plain non-negative number, or an uppercase ISO 4217 currency code."
+            "plain non-negative number, an uppercase ISO 4217 currency code, or "
+            "for 'category', exactly 'room' or 'board'."
         )
     )
 

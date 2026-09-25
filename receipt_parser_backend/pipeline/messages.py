@@ -5,6 +5,8 @@ All user-facing text is a template, never AI-written (design rule 4).
 
 from __future__ import annotations
 
+from datetime import date
+
 from receipt_parser_backend.countries import supported_codes
 
 START_TEXT = (
@@ -22,8 +24,13 @@ HELP_TEXT = (
     "/confirm - save the draft\n"
     "/cancel - stop processing or discard the draft\n"
     "/last - show your most recently saved receipt\n"
-    "/undo - delete your most recently saved receipt"
+    "/undo - delete your most recently saved receipt\n"
+    "/report START END - PDF report of room/board receipts, e.g. "
+    "/report 2026-01-01 2026-03-31"
 )
+
+REPORT_USAGE = "Usage: /report YYYY-MM-DD YYYY-MM-DD (start date, then end date, both inclusive)."
+REPORT_FAILED = "Sorry, something went wrong building that report. Please try again."
 
 COUNTRY_NOT_SET = "Please set a country first with /country, e.g. /country US."
 COMPRESSED_PHOTO_REJECTED = "Please resend that as a file (not a compressed photo)."
@@ -97,6 +104,15 @@ def note_total_set_by_user_mismatch(
         f"Expected total from items: {expected:.2f} {currency}. "
         f"Difference: {difference:.2f} {currency}."
     )
+
+
+def report_no_receipts(start_date: date, end_date: date) -> str:
+    return f"No categorized (room/board) receipts found between {start_date} and {end_date}."
+
+
+def report_ready(start_date: date, end_date: date, count: int) -> str:
+    plural = "" if count == 1 else "s"
+    return f"529 report for {start_date} to {end_date}: {count} receipt{plural}."
 
 
 def note_total_override_accepted(

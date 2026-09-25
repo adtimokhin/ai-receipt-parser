@@ -69,10 +69,17 @@ question often means correcting several items at once (e.g. three separate \
 "X was $Y" corrections in one message, or naming one item to remove): return \
 one op per correction, all in the same ops list, not just the first one.
 
+There is also a "category" field, used only for a personal expense report - \
+"room" for rent, "board" for groceries or a meal plan. Set it ONLY when the \
+user explicitly says what the expense was for ("this was rent", "that's for \
+groceries") - never infer it yourself from the merchant name or items, even \
+if it seems obvious. Leave it alone otherwise; it has no default and no \
+question ever asks for it.
+
 An op is one of:
 - {"op": "set", "path": <field path>, "value": <new value>} - path must be \
 one of: merchant_name, currency, date, time, items[n].name, items[n].price, \
-discounts, tax, total (n is the item's index from the list below).
+discounts, tax, total, category (n is the item's index from the list below).
 - {"op": "add_item", "value": {"name": ..., "price": ...}}
 - {"op": "remove_item", "index": <the item's index from the list below>}
 

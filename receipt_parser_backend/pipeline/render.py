@@ -31,6 +31,8 @@ def render_draft_summary(draft: Draft) -> str:
     lines.append(f"Discounts: {_format_amount(draft.discounts, draft.currency)}")
     lines.append(f"Tax: {_format_amount(draft.tax, draft.currency)}")
     lines.append(f"Total: {_format_amount(draft.total, draft.currency)}")
+    if draft.category is not None:
+        lines.append(f"Category: {draft.category}")
     return "\n".join(lines)
 
 

@@ -89,3 +89,28 @@ async def delete_receipt(receipt_id: str) -> None:
     """Delete a receipt by its Mongo id (spec ``/undo``)."""
 
     await _receipts_collection().delete_one({"_id": ObjectId(receipt_id)})
+
+
+async def get_categorized_receipts_in_range(
+    telegram_user_id: int, start_date: str, end_date: str
+) -> list[Receipt]:
+    """Room/board-categorized receipts for ``/report``, ``date`` in ``[start_date, end_date]``.
+
+    Both bounds are inclusive ISO ``YYYY-MM-DD`` strings; a persisted receipt
+    always has ``date`` set (it's a required gap - spec Step 5.2), so a plain
+    string comparison is safe. Sorted chronologically for the report.
+    """
+
+    cursor = _receipts_collection().find(
+        {
+            "telegram_user_id": telegram_user_id,
+            "category": {"$in": ["room", "board"]},
+            "date": {"$gte": start_date, "$lte": end_date},
+        },
+        sort=[("date", 1)],
+    )
+    receipts = []
+    async for doc in cursor:
+        doc["_id"] = str(doc["_id"])
+        receipts.append(Receipt.model_validate(doc))
+    return receipts

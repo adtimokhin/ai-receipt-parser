@@ -371,6 +371,98 @@ async def test_undo_is_rejected_outside_idle(
     assert "only works" in _last_text(telegram_client)
 
 
+# --- /report (spec-adjacent, 529 reports) -------------------------------------
+
+
+async def test_report_is_rejected_outside_idle(
+    pipeline: ReceiptPipeline, telegram_client: list[dict[str, object]]
+) -> None:
+    await _put_session(state=SessionState.PROCESSING)
+    await pipeline.handle_command(USER, "/report", "2026-01-01 2026-01-31")
+    assert "only works" in _last_text(telegram_client)
+
+
+async def test_report_with_no_args_shows_usage(
+    pipeline: ReceiptPipeline, telegram_client: list[dict[str, object]]
+) -> None:
+    await pipeline.handle_command(USER, "/report", "")
+    assert _last_text(telegram_client) == messages.REPORT_USAGE
+
+
+async def test_report_with_malformed_dates_shows_usage(
+    pipeline: ReceiptPipeline, telegram_client: list[dict[str, object]]
+) -> None:
+    await pipeline.handle_command(USER, "/report", "not-a-date 2026-01-31")
+    assert _last_text(telegram_client) == messages.REPORT_USAGE
+
+
+async def test_report_with_start_after_end_shows_usage(
+    pipeline: ReceiptPipeline, telegram_client: list[dict[str, object]]
+) -> None:
+    await pipeline.handle_command(USER, "/report", "2026-01-31 2026-01-01")
+    assert _last_text(telegram_client) == messages.REPORT_USAGE
+
+
+async def test_report_with_no_categorized_receipts_reports_that(
+    pipeline: ReceiptPipeline, telegram_client: list[dict[str, object]]
+) -> None:
+    await pipeline.handle_command(USER, "/report", "2026-01-01 2026-01-31")
+    assert "No categorized" in _last_text(telegram_client)
+
+
+async def test_report_happy_path_sends_a_pdf(
+    pipeline: ReceiptPipeline,
+    telegram_client: list[dict[str, object]],
+    blob_storage_client: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import io
+
+    from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
+
+    from receipt_parser_backend.blob_storage.client import upload_bytes
+
+    sent_documents: list[tuple[int, str, bytes, str | None]] = []
+
+    async def _fake_send_document(
+        chat_id: int, filename: str, content: bytes, caption: str | None = None
+    ) -> None:
+        sent_documents.append((chat_id, filename, content, caption))
+
+    monkeypatch.setattr("receipt_parser_backend.pipeline.engine.send_document", _fake_send_document)
+
+    pdf_buffer = io.BytesIO()
+    canvas_obj = canvas.Canvas(pdf_buffer)
+    canvas_obj.drawString(100, 700, "fake receipt")
+    canvas_obj.showPage()
+    canvas_obj.save()
+    await upload_bytes("receipts/1", pdf_buffer.getvalue(), "application/pdf")
+    await repository.insert_receipt(
+        Receipt(
+            telegram_user_id=USER,
+            country_code="US",
+            merchant_name="Landlord LLC",
+            currency="USD",
+            date="2026-01-15",
+            total=1200.0,
+            category="room",
+            files=ReceiptFiles(
+                original_r2_key="receipts/1", original_content_type="application/pdf"
+            ),
+            created_at=datetime.now(UTC),
+        )
+    )
+
+    await pipeline.handle_command(USER, "/report", "2026-01-01 2026-01-31")
+
+    assert len(sent_documents) == 1
+    chat_id, filename, content, caption = sent_documents[0]
+    assert chat_id == USER
+    assert filename == "529-report-2026-01-01-to-2026-01-31.pdf"
+    assert content.startswith(b"%PDF")
+    assert caption is not None and "1" in caption
+
+
 # --- file intake (spec Step 1) -----------------------------------------------
 
 
