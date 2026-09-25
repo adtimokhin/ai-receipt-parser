@@ -143,3 +143,49 @@ async def test_prompt_carries_state_question_and_country_instructions(
     assert "missing_date" in user_message
     assert "France" in user_message
     assert "le 15 janvier" in user_message
+
+
+async def test_prompt_renders_the_actual_question_text_not_just_its_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: the model only ever saw the opaque id (e.g. "missing_item_price:4"),
+    not the sentence the user was actually shown - it needs both."""
+
+    captured: list[httpx2.Request] = []
+    _install(monkeypatch, captured_requests=captured)
+
+    await _interpret(active_question="missing_date")
+
+    payload = json.loads(captured[0].content)
+    user_message = next(m["content"] for m in payload["messages"] if m["role"] == "user")
+    assert "I couldn't find the date on this receipt" in user_message
+
+
+async def test_prompt_names_the_item_and_offers_remove_item_for_a_missing_price_question(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for a real failure: asked for "2 @ $1.99"'s price, the user replied
+    "discard 2 @ $1.99" and the bot just re-asked the same question - the prompt gave
+    the model no way to know which index that item was, or that removing it was an option."""
+
+    from receipt_parser_backend.pipeline.questions import missing_item_price_question_id
+
+    draft = Draft(
+        currency="USD",
+        total=10.0,
+        items=[Item(name="Milk", price=5.0), Item(name="2 @ $1.99", price=None)],
+    )
+    captured: list[httpx2.Request] = []
+    _install(monkeypatch, captured_requests=captured)
+
+    await _interpret(
+        draft=draft,
+        active_question=missing_item_price_question_id(1),
+        user_text="discard 2 @ $1.99",
+    )
+
+    payload = json.loads(captured[0].content)
+    user_message = next(m["content"] for m in payload["messages"] if m["role"] == "user")
+    assert "2 @ $1.99" in user_message
+    assert "index 1" in user_message
+    assert "remove_item" in user_message

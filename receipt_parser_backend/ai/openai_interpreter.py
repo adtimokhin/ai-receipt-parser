@@ -22,6 +22,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from receipt_parser_backend.ai.interpreter import InterpreterOutput
 from receipt_parser_backend.config import get_settings
 from receipt_parser_backend.llm.openai.client import get_client
+from receipt_parser_backend.pipeline.questions import parse_question_id, question_text
 from receipt_parser_backend.receipts.models import Draft, SessionState
 
 logger = structlog.get_logger(__name__)
@@ -41,6 +42,13 @@ doesn't clearly fit either).
 "edit" (the user wants to change a field), "unclear" (anything that doesn't \
 clearly fit either).
 If you are not confident, use "unclear" rather than guessing.
+
+If the active question asks for a missing item's price and the user instead \
+says that item isn't real - "discard it", "remove it", "delete that line", \
+"that's not an item", calling it a duplicate, a promo line, or a fee that \
+shouldn't be counted separately - that is still intent "answer", with a \
+remove_item op for that item. Do not treat it as unclear just because no \
+price was given.
 
 An op is one of:
 - {"op": "set", "path": <field path>, "value": <new value>} - path must be \
@@ -124,8 +132,33 @@ def _user_message(
 ) -> str:
     return (
         f"State: {state.value}\n"
-        f"Active question: {active_question or 'none'}\n"
+        f"Active question: {_render_active_question(active_question, draft)}\n"
         f"Country instructions: {interpreter_prompt}\n"
         f"Current draft: {draft.model_dump_json(exclude_none=True)}\n"
         f"User's reply: {user_text}"
     )
+
+
+def _render_active_question(active_question: str | None, draft: Draft) -> str:
+    """The question's own id plus the exact text the user was shown.
+
+    For a missing-item-price question, also names the item and its index
+    explicitly, so the model doesn't have to infer "which item" by counting
+    through the draft JSON itself - that's what let a "discard it" reply
+    silently fail before (spec 9.2's own id, e.g. "missing_item_price:4",
+    carried none of that).
+    """
+
+    if active_question is None:
+        return "none"
+
+    rendered = question_text(active_question, draft)
+    _, item_index = parse_question_id(active_question)
+    if item_index is not None:
+        item_name = draft.items[item_index].name or "an item"
+        rendered += (
+            f' [Specifically about the item at index {item_index} ("{item_name}"). If the '
+            "user says it isn't a real item, use remove_item with index "
+            f"{item_index} instead of a price.]"
+        )
+    return f'{active_question} - "{rendered}"'
