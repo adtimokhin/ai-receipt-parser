@@ -209,6 +209,58 @@ async def test_summary_table_shows_a_placeholder_when_date_or_time_is_missing(
     assert "?" in text
 
 
+async def test_footer_is_stamped_on_every_page_with_page_numbers_and_date_range(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_pdf = _tiny_pdf("Original page one", "Original page two")
+    _stub_downloads(monkeypatch, {"k1": original_pdf})
+    receipt = _receipt(
+        merchant_name="Grocer",
+        total=42.0,
+        category="board",
+        r2_key="k1",
+        content_type="application/pdf",
+    )
+
+    pdf_bytes = await build_report_pdf([receipt], "2026-01-01", "2026-01-31")
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+
+    # summary + label + 2 original pages = 4 pages total
+    assert len(reader.pages) == 4
+    for index, page in enumerate(reader.pages, start=1):
+        text = page.extract_text()
+        assert "2026-01-01 to 2026-01-31" in text
+        assert f"Page {index} of 4" in text
+
+
+async def test_footer_fits_a_differently_sized_original_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The footer must overlay correctly even when an embedded original PDF
+    page isn't Letter-sized (e.g. a receipt scanned at a different size)."""
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(200, 400))
+    c.drawString(20, 380, "Tiny original receipt")
+    c.showPage()
+    c.save()
+    _stub_downloads(monkeypatch, {"k1": buf.getvalue()})
+    receipt = _receipt(
+        merchant_name="Corner Store",
+        total=5.0,
+        category="board",
+        r2_key="k1",
+        content_type="application/pdf",
+    )
+
+    pdf_bytes = await build_report_pdf([receipt], "2026-01-01", "2026-01-31")
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+
+    original_page = reader.pages[2]
+    assert "Tiny original receipt" in original_page.extract_text()
+    assert "Page 3 of 3" in original_page.extract_text()
+
+
 async def test_subtotals_are_grouped_by_currency_not_summed_together(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

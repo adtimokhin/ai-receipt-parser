@@ -15,8 +15,9 @@ from collections import defaultdict
 
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib import colors  # type: ignore[import-untyped]
+from reportlab.lib.enums import TA_CENTER  # type: ignore[import-untyped]
 from reportlab.lib.pagesizes import letter  # type: ignore[import-untyped]
-from reportlab.lib.styles import getSampleStyleSheet  # type: ignore[import-untyped]
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet  # type: ignore[import-untyped]
 from reportlab.lib.units import inch  # type: ignore[import-untyped]
 from reportlab.lib.utils import ImageReader  # type: ignore[import-untyped]
 from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
@@ -49,6 +50,8 @@ async def build_report_pdf(receipts: list[Receipt], start_date: str, end_date: s
         else:
             _append_pdf(writer, _build_image_page(original_bytes))
 
+    _stamp_footer(writer, start_date, end_date)
+
     output = io.BytesIO()
     writer.write(output)
     return output.getvalue()
@@ -59,13 +62,40 @@ def _append_pdf(writer: PdfWriter, pdf_bytes: bytes) -> None:
         writer.add_page(page)
 
 
+def _stamp_footer(writer: PdfWriter, start_date: str, end_date: str) -> None:
+    """Overlay "<range> - Page N of M" at the bottom of every page, including
+    the embedded original receipts - sized to each page's own dimensions,
+    since an original receipt's page size may not match the generated ones."""
+
+    total_pages = len(writer.pages)
+    for index, page in enumerate(writer.pages, start=1):
+        width = float(page.mediabox.width)
+        height = float(page.mediabox.height)
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=(width, height))
+        c.setFont("Helvetica", 8)
+        c.setFillColor(colors.grey)
+        c.drawCentredString(
+            width / 2,
+            0.3 * inch,
+            f"{start_date} to {end_date}  •  Page {index} of {total_pages}",
+        )
+        c.showPage()
+        c.save()
+        footer_page = PdfReader(io.BytesIO(buffer.getvalue())).pages[0]
+        page.merge_page(footer_page)
+
+
 def _build_summary_pdf(receipts: list[Receipt], start_date: str, end_date: str) -> bytes:
     styles = getSampleStyleSheet()
+    date_range_style = ParagraphStyle(
+        "DateRange", parent=styles["Normal"], fontSize=14, alignment=TA_CENTER, spaceAfter=6
+    )
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     story = [
         Paragraph("529 Expense Report", styles["Title"]),
-        Paragraph(f"{start_date} to {end_date}", styles["Normal"]),
+        Paragraph(f"{start_date} to {end_date}", date_range_style),
         Spacer(1, 0.25 * inch),
     ]
 
