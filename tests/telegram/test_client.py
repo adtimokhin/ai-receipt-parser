@@ -121,6 +121,37 @@ async def test_send_document_posts_the_file_and_caption(
     assert b'filename="report.pdf"' in body
     assert b"%PDF-fake-bytes" in body
     assert b"Here is your report" in body
+    assert b"application/pdf" in body
+
+
+async def test_send_document_honors_a_custom_content_type(
+    telegram_client: list[dict[str, object]],
+) -> None:
+    import httpx
+
+    from receipt_parser_backend.telegram import client as client_mod
+    from receipt_parser_backend.telegram.client import send_document
+
+    captured: list[httpx.Request] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json={"ok": True, "result": {}})
+
+    client_mod._client = httpx.AsyncClient(
+        base_url="https://api.telegram.org/bottest-token", transport=httpx.MockTransport(_handler)
+    )
+
+    await send_document(
+        42,
+        "report.xlsx",
+        b"PK-fake-zip-bytes",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+    body = captured[0].content
+    assert b'filename="report.xlsx"' in body
+    assert b"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in body
 
 
 async def test_send_document_without_a_caption_omits_it(

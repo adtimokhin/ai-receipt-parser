@@ -425,7 +425,11 @@ async def test_report_happy_path_sends_a_pdf(
     sent_documents: list[tuple[int, str, bytes, str | None]] = []
 
     async def _fake_send_document(
-        chat_id: int, filename: str, content: bytes, caption: str | None = None
+        chat_id: int,
+        filename: str,
+        content: bytes,
+        caption: str | None = None,
+        content_type: str = "application/pdf",
     ) -> None:
         sent_documents.append((chat_id, filename, content, caption))
 
@@ -455,12 +459,17 @@ async def test_report_happy_path_sends_a_pdf(
 
     await pipeline.handle_command(USER, "/report", "2026-01-01 2026-01-31")
 
-    assert len(sent_documents) == 1
-    chat_id, filename, content, caption = sent_documents[0]
-    assert chat_id == USER
-    assert filename == "529-report-2026-01-01-to-2026-01-31.pdf"
-    assert content.startswith(b"%PDF")
-    assert caption is not None and "1" in caption
+    assert len(sent_documents) == 2
+    pdf_chat_id, pdf_filename, pdf_content, pdf_caption = sent_documents[0]
+    assert pdf_chat_id == USER
+    assert pdf_filename == "529-report-2026-01-01-to-2026-01-31.pdf"
+    assert pdf_content.startswith(b"%PDF")
+    assert pdf_caption is not None and "1" in pdf_caption
+
+    xlsx_chat_id, xlsx_filename, xlsx_content, _xlsx_caption = sent_documents[1]
+    assert xlsx_chat_id == USER
+    assert xlsx_filename == "529-report-2026-01-01-to-2026-01-31.xlsx"
+    assert xlsx_content.startswith(b"PK")  # .xlsx is a zip container
 
 
 async def test_auto_classified_category_shows_in_the_confirmation_summary(

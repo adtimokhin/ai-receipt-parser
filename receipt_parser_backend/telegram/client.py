@@ -50,14 +50,18 @@ async def send_message(chat_id: int, text: str) -> None:
 
 
 async def send_document(
-    chat_id: int, filename: str, content: bytes, caption: str | None = None
+    chat_id: int,
+    filename: str,
+    content: bytes,
+    caption: str | None = None,
+    content_type: str = "application/pdf",
 ) -> None:
-    """Send ``content`` as a file attachment via ``sendDocument`` (e.g. a /report PDF)."""
+    """Send ``content`` as a file attachment via ``sendDocument`` (e.g. a /report PDF or .xlsx)."""
 
     data = {"chat_id": str(chat_id)}
     if caption:
         data["caption"] = caption
-    files = {"document": (filename, content, "application/pdf")}
+    files = {"document": (filename, content, content_type)}
     response = await get_client().post("/sendDocument", data=data, files=files)
     response.raise_for_status()
 
@@ -95,7 +99,7 @@ BOT_COMMANDS: list[tuple[str, str]] = [
     ("cancel", "Stop processing or discard the draft"),
     ("last", "Show your most recently saved receipt"),
     ("undo", "Delete your most recently saved receipt"),
-    ("report", "Get a PDF report of categorized receipts in a date range"),
+    ("report", "Get a PDF + Excel report of categorized receipts in a date range"),
 ]
 
 

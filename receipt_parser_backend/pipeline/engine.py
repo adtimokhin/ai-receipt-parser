@@ -48,6 +48,7 @@ from receipt_parser_backend.receipts.models import (
     UserSettings,
 )
 from receipt_parser_backend.reports.builder import build_report_pdf
+from receipt_parser_backend.reports.xlsx_builder import build_report_xlsx
 from receipt_parser_backend.sessions import repository
 from receipt_parser_backend.telegram.client import download_file, send_document, send_message
 
@@ -306,17 +307,24 @@ class ReceiptPipeline:
             pdf_bytes = await build_report_pdf(
                 receipts, start_date.isoformat(), end_date.isoformat()
             )
+            xlsx_bytes = build_report_xlsx(receipts, start_date.isoformat(), end_date.isoformat())
         except Exception as exc:
             logger.warning("report.build_failed", user_id=user_id, error=repr(exc))
             await self._reply(user_id, messages.REPORT_FAILED)
             return
 
-        filename = f"529-report-{start_date.isoformat()}-to-{end_date.isoformat()}.pdf"
+        stem = f"529-report-{start_date.isoformat()}-to-{end_date.isoformat()}"
         await send_document(
             user_id,
-            filename,
+            f"{stem}.pdf",
             pdf_bytes,
             caption=messages.report_ready(start_date, end_date, len(receipts)),
+        )
+        await send_document(
+            user_id,
+            f"{stem}.xlsx",
+            xlsx_bytes,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
     # --- non-command messages (spec Section 7 table) ------------------------

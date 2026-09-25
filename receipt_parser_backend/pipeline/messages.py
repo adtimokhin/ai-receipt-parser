@@ -25,7 +25,7 @@ HELP_TEXT = (
     "/cancel - stop processing or discard the draft\n"
     "/last - show your most recently saved receipt\n"
     "/undo - delete your most recently saved receipt\n"
-    "/report START END - PDF report of room/board receipts, e.g. "
+    "/report START END - PDF + Excel report of room/board receipts, e.g. "
     "/report 2026-01-01 2026-03-31"
 )
 
