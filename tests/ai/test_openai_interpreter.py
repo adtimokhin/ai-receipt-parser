@@ -189,3 +189,40 @@ async def test_prompt_names_the_item_and_offers_remove_item_for_a_missing_price_
     assert "2 @ $1.99" in user_message
     assert "index 1" in user_message
     assert "remove_item" in user_message
+
+
+async def test_prompt_lists_every_item_with_an_explicit_index(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for a real failure: three item-price corrections in one message during
+    total_mismatch all silently failed. The draft used to be dumped as a bare JSON array,
+    forcing the model to count positions itself to find each item's index."""
+
+    from receipt_parser_backend.receipts.models import TotalCheck
+
+    draft = Draft(
+        currency="USD",
+        total=26.20,
+        items=[
+            Item(name="T HOL HOLIDAY CHALLAH PLAI", price=3.39),
+            Item(name="T PASTA FUSILLI CORTI BUCA", price=1.39),
+            Item(name="T EGGPLANT EACH", price=3.38),
+        ],
+        total_check=TotalCheck(
+            status="mismatch", item_sum=8.16, expected_total=8.16, difference=18.04
+        ),
+    )
+    captured: list[httpx2.Request] = []
+    _install(monkeypatch, captured_requests=captured)
+
+    await _interpret(
+        draft=draft,
+        active_question="total_mismatch",
+        user_text="HOL HOLIDAY CHALLAH PLAI was 3.99",
+    )
+
+    payload = json.loads(captured[0].content)
+    user_message = next(m["content"] for m in payload["messages"] if m["role"] == "user")
+    assert "0: 'T HOL HOLIDAY CHALLAH PLAI' - 3.39 USD" in user_message
+    assert "1: 'T PASTA FUSILLI CORTI BUCA' - 1.39 USD" in user_message
+    assert "2: 'T EGGPLANT EACH' - 3.38 USD" in user_message

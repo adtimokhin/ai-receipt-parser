@@ -50,12 +50,21 @@ shouldn't be counted separately - that is still intent "answer", with a \
 remove_item op for that item. Do not treat it as unclear just because no \
 price was given.
 
+The draft's items are listed below as "index: name - price", using the \
+receipt's own printed (sometimes abbreviated or truncated) names. When the \
+user refers to an item, match it to the closest one in that list by name - \
+it will often be reworded, shortened, or missing a leading code like "T " - \
+and use *that* item's exact index in any op. Answering a total_mismatch \
+question often means correcting several items at once (e.g. three separate \
+"X was $Y" corrections in one message, or naming one item to remove): return \
+one op per correction, all in the same ops list, not just the first one.
+
 An op is one of:
 - {"op": "set", "path": <field path>, "value": <new value>} - path must be \
 one of: merchant_name, currency, date, time, items[n].name, items[n].price, \
-discounts, tax, total (n is a zero-based index into the current items list).
+discounts, tax, total (n is the item's index from the list below).
 - {"op": "add_item", "value": {"name": ..., "price": ...}}
-- {"op": "remove_item", "index": <zero-based index into the current items list>}
+- {"op": "remove_item", "index": <the item's index from the list below>}
 
 Values must already be in canonical form, using the country instructions \
 below to parse the user's own formatting: dates as ISO "YYYY-MM-DD", times \
@@ -119,6 +128,11 @@ class OpenAIInterpreter:
         )
         message = completion.choices[0].message
         if message.refusal or message.parsed is None:
+            logger.info(
+                "interpreter.no_parsed_output",
+                refusal=message.refusal,
+                content=message.content,
+            )
             return InterpreterOutput(intent="unclear")
         return message.parsed
 
@@ -134,9 +148,35 @@ def _user_message(
         f"State: {state.value}\n"
         f"Active question: {_render_active_question(active_question, draft)}\n"
         f"Country instructions: {interpreter_prompt}\n"
-        f"Current draft: {draft.model_dump_json(exclude_none=True)}\n"
+        f"Current draft:\n{_render_draft(draft)}\n"
         f"User's reply: {user_text}"
     )
+
+
+def _render_draft(draft: Draft) -> str:
+    """Draft fields plus an explicitly indexed item list.
+
+    Items are rendered as "index: name - price", not a bare JSON array: the
+    model needs the item's exact index for any op, and making it count array
+    positions itself (the raw JSON dump this used to send) was unreliable
+    once there were more than a couple of items - it would silently give up
+    (intent "unclear") rather than risk a wrong index.
+    """
+
+    lines = [
+        f"merchant_name: {draft.merchant_name!r}",
+        f"currency: {draft.currency!r}",
+        f"date: {draft.date!r}",
+        f"time: {draft.time!r}",
+        f"discounts: {draft.discounts!r}",
+        f"tax: {draft.tax!r}",
+        f"total: {draft.total!r}",
+        "items (index: name - price):",
+    ]
+    for index, item in enumerate(draft.items):
+        price = "null" if item.price is None else f"{item.price} {draft.currency}"
+        lines.append(f"  {index}: {item.name!r} - {price}")
+    return "\n".join(lines)
 
 
 def _render_active_question(active_question: str | None, draft: Draft) -> str:

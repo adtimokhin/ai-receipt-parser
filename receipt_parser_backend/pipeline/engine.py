@@ -15,15 +15,21 @@ from collections.abc import Coroutine
 from datetime import UTC, datetime
 from typing import Any
 
+import structlog
+
 from receipt_parser_backend.ai.extraction import ALLOWED_MIME_TYPES, ExtractionFailed, ExtractorPort
-from receipt_parser_backend.ai.interpreter import InterpreterPort, SetOp
+from receipt_parser_backend.ai.interpreter import InterpreterOutput, InterpreterPort, SetOp
 from receipt_parser_backend.ai.llamaextract_extractor import LlamaExtractExtractor
 from receipt_parser_backend.ai.openai_interpreter import OpenAIInterpreter
 from receipt_parser_backend.blob_storage.client import upload_bytes
 from receipt_parser_backend.countries import CountryProfile, get_profile
 from receipt_parser_backend.pipeline import messages, render
 from receipt_parser_backend.pipeline.normalizer import normalize_extraction
-from receipt_parser_backend.pipeline.ops import apply_ops, validate_interpreter_output
+from receipt_parser_backend.pipeline.ops import (
+    ValidatedReply,
+    apply_ops,
+    validate_interpreter_output,
+)
 from receipt_parser_backend.pipeline.questions import TOTAL_MISMATCH, question_text
 from receipt_parser_backend.pipeline.validator import (
     compute_total_check,
@@ -41,6 +47,8 @@ from receipt_parser_backend.receipts.models import (
 )
 from receipt_parser_backend.sessions import repository
 from receipt_parser_backend.telegram.client import download_file, send_message
+
+logger = structlog.get_logger(__name__)
 
 _MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
 
@@ -62,6 +70,35 @@ def _now() -> datetime:
 def _build_r2_key(user_id: int, mime_type: str) -> str:
     extension = ALLOWED_MIME_TYPES.get(mime_type, "bin")
     return f"receipts/{user_id}/{uuid.uuid4().hex}/original.{extension}"
+
+
+def _log_interpretation(
+    user_id: int,
+    user_text: str,
+    active_question: str | None,
+    output: InterpreterOutput,
+    validated: ValidatedReply,
+) -> None:
+    """Log why a reply ended up ``unclear`` - the two causes look identical
+    from the outside (both just re-ask the same question), which made a real
+    failure ("2 @ $1.99 must be removed") indistinguishable from the user
+    saying something genuinely unrelated. ``rejected_by_validation=True``
+    means the model tried something and Section 9.2 validation threw it out
+    (bad path/type/index - see pipeline/ops.py); ``False`` means the model
+    itself gave up and returned "unclear".
+    """
+
+    if validated.intent != "unclear":
+        return
+    logger.info(
+        "interpreter.result_unclear",
+        user_id=user_id,
+        active_question=active_question,
+        user_text=user_text,
+        raw_intent=output.intent,
+        raw_ops=[op.model_dump() for op in output.ops],
+        rejected_by_validation=output.intent != "unclear",
+    )
 
 
 class ReceiptPipeline:
@@ -383,6 +420,7 @@ class ReceiptPipeline:
             active_question=session.current_question,
             item_count=len(session.draft.items),
         )
+        _log_interpretation(user_id, text, session.current_question, output, validated)
 
         if validated.intent == "answer":
             answering_total_mismatch = session.current_question == TOTAL_MISMATCH
@@ -451,6 +489,7 @@ class ReceiptPipeline:
         validated = validate_interpreter_output(
             output, state=session.state, active_question=None, item_count=len(session.draft.items)
         )
+        _log_interpretation(user_id, text, None, output, validated)
 
         if validated.intent == "confirm":
             await self._persist_and_finish(user_id, session)
