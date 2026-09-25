@@ -10,7 +10,7 @@ from pypdf import PdfReader
 from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
 
 from receipt_parser_backend import reports
-from receipt_parser_backend.receipts.models import Receipt, ReceiptFiles
+from receipt_parser_backend.receipts.models import Item, Receipt, ReceiptFiles
 from receipt_parser_backend.reports.builder import build_report_pdf
 
 _ = reports  # imported for its side-effect-free package marker; keeps ruff happy
@@ -42,13 +42,18 @@ def _receipt(
     currency: str = "USD",
     r2_key: str,
     content_type: str = "image/jpeg",
+    date: str = "2026-01-15",
+    time: str | None = None,
+    items: list[Item] | None = None,
 ) -> Receipt:
     return Receipt(
         telegram_user_id=1,
         country_code="US",
         merchant_name=merchant_name,
         currency=currency,
-        date="2026-01-15",
+        date=date,
+        time=time,
+        items=items or [],
         total=total,
         category=category,
         files=ReceiptFiles(original_r2_key=r2_key, original_content_type=content_type),
@@ -94,6 +99,41 @@ async def test_image_receipt_produces_a_label_and_image_page(
     assert "1200.00 USD" in label_text
 
 
+async def test_label_page_includes_the_typed_itemized_breakdown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    jpeg = _tiny_jpeg()
+    _stub_downloads(monkeypatch, {"k1": jpeg})
+    receipt = _receipt(
+        merchant_name="Trader Joes",
+        total=25.50,
+        category="board",
+        r2_key="k1",
+        items=[Item(name="Milk", price=4.5), Item(name="Bread", price=3.0)],
+    )
+
+    pdf_bytes = await build_report_pdf([receipt], "2026-01-01", "2026-01-31")
+    label_text = PdfReader(io.BytesIO(pdf_bytes)).pages[1].extract_text()
+
+    assert "Milk" in label_text
+    assert "4.50 USD" in label_text
+    assert "Bread" in label_text
+    assert "3.00 USD" in label_text
+
+
+async def test_label_page_shows_a_placeholder_when_no_items_were_recorded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    jpeg = _tiny_jpeg()
+    _stub_downloads(monkeypatch, {"k1": jpeg})
+    receipt = _receipt(merchant_name="Trader Joes", total=25.50, category="board", r2_key="k1")
+
+    pdf_bytes = await build_report_pdf([receipt], "2026-01-01", "2026-01-31")
+    label_text = PdfReader(io.BytesIO(pdf_bytes)).pages[1].extract_text()
+
+    assert "none itemized" in label_text
+
+
 async def test_pdf_receipt_pages_are_merged_directly_not_rasterized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -116,22 +156,57 @@ async def test_pdf_receipt_pages_are_merged_directly_not_rasterized(
     assert "Original page two" in reader.pages[3].extract_text()
 
 
-async def test_summary_table_lists_vendor_type_and_total(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_summary_table_lists_vendor_date_time_type_and_total(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     jpeg = _tiny_jpeg()
     _stub_downloads(monkeypatch, {"k1": jpeg, "k2": jpeg})
     receipts = [
-        _receipt(merchant_name="Landlord LLC", total=1200.0, category="room", r2_key="k1"),
-        _receipt(merchant_name="Trader Joes", total=85.32, category="board", r2_key="k2"),
+        _receipt(
+            merchant_name="Landlord LLC",
+            total=1200.0,
+            category="room",
+            r2_key="k1",
+            date="2026-01-05",
+            time="09:30",
+        ),
+        _receipt(
+            merchant_name="Trader Joes",
+            total=85.32,
+            category="board",
+            r2_key="k2",
+            date="2026-01-10",
+            time="18:45",
+        ),
     ]
 
     pdf_bytes = await build_report_pdf(receipts, "2026-01-01", "2026-01-31")
     text = PdfReader(io.BytesIO(pdf_bytes)).pages[0].extract_text()
 
     assert "Landlord LLC" in text
+    assert "2026-01-05" in text
+    assert "09:30" in text
     assert "Trader Joes" in text
+    assert "2026-01-10" in text
+    assert "18:45" in text
     assert "Room total: 1200.00 USD" in text
     assert "Board total: 85.32 USD" in text
     assert "Grand total: 1285.32 USD" in text
+
+
+async def test_summary_table_shows_a_placeholder_when_date_or_time_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    jpeg = _tiny_jpeg()
+    _stub_downloads(monkeypatch, {"k1": jpeg})
+    receipt = _receipt(
+        merchant_name="Landlord LLC", total=1200.0, category="room", r2_key="k1", time=None
+    )
+
+    pdf_bytes = await build_report_pdf([receipt], "2026-01-01", "2026-01-31")
+    text = PdfReader(io.BytesIO(pdf_bytes)).pages[0].extract_text()
+
+    assert "?" in text
 
 
 async def test_subtotals_are_grouped_by_currency_not_summed_together(

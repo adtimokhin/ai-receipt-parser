@@ -1,4 +1,4 @@
-"""Non-AI 529 expense report builder: a summary table plus one page per receipt.
+"""Non-AI 529 expense report builder: a summary table plus one itemized page per receipt.
 
 Pure aggregation and PDF assembly - no AI touchpoint, per the user's explicit
 "non-AI report builder" requirement. Categorization already happened at
@@ -69,7 +69,7 @@ def _build_summary_pdf(receipts: list[Receipt], start_date: str, end_date: str) 
         Spacer(1, 0.25 * inch),
     ]
 
-    table_data: list[list[str]] = [["Vendor", "Type", "Total"]]
+    table_data: list[list[str]] = [["Vendor", "Date", "Time", "Type", "Total"]]
     category_subtotals: dict[tuple[str, str], float] = defaultdict(float)
     for receipt in receipts:
         assert receipt.category is not None  # filtered by the repository query
@@ -77,20 +77,22 @@ def _build_summary_pdf(receipts: list[Receipt], start_date: str, end_date: str) 
         table_data.append(
             [
                 receipt.merchant_name or "?",
+                receipt.date or "?",
+                receipt.time or "?",
                 _CATEGORY_LABELS[receipt.category],
                 f"{receipt.total:.2f} {receipt.currency}",
             ]
         )
         category_subtotals[(receipt.category, receipt.currency)] += receipt.total
 
-    table = Table(table_data, colWidths=[2.5 * inch, 1 * inch, 1.5 * inch])
+    table = Table(table_data, colWidths=[2 * inch, 0.9 * inch, 0.7 * inch, 0.8 * inch, 1.3 * inch])
     table.setStyle(
         TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                ("ALIGN", (2, 0), (2, -1), "RIGHT"),
+                ("ALIGN", (4, 0), (4, -1), "RIGHT"),
             ]
         )
     )
@@ -117,6 +119,13 @@ def _build_summary_pdf(receipts: list[Receipt], start_date: str, end_date: str) 
 
 
 def _build_label_page(receipt: Receipt) -> bytes:
+    """Merchant/date/type/total plus a typed itemized breakdown.
+
+    The typed list is a legibility fallback alongside the embedded receipt
+    photo/PDF that follows this page - the photo may be blurry or a page cut
+    off, but the itemized text always reads cleanly.
+    """
+
     styles = getSampleStyleSheet()
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
@@ -127,7 +136,16 @@ def _build_label_page(receipt: Receipt) -> bytes:
         Paragraph(f"Date: {receipt.date or '?'}", styles["Normal"]),
         Paragraph(f"Type: {_CATEGORY_LABELS[receipt.category]}", styles["Normal"]),
         Paragraph(f"Total: {receipt.total:.2f} {receipt.currency}", styles["Normal"]),
+        Spacer(1, 0.15 * inch),
+        Paragraph("Items:", styles["Heading3"]),
     ]
+    if receipt.items:
+        for item in receipt.items:
+            name = item.name or "?"
+            price = f"{item.price:.2f} {receipt.currency}" if item.price is not None else "?"
+            story.append(Paragraph(f"{name} — {price}", styles["Normal"]))
+    else:
+        story.append(Paragraph("(none itemized)", styles["Normal"]))
     doc.build(story)
     return buffer.getvalue()
 
