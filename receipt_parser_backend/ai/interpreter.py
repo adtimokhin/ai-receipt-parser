@@ -15,7 +15,7 @@ that must pass before any op is applied.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -67,7 +67,14 @@ class RemoveItemOp(BaseModel):
     index: int = Field(description="Zero-based index into the draft's current item list.")
 
 
-Op = Annotated[SetOp | AddItemOp | RemoveItemOp, Field(discriminator="op")]
+# Not a discriminated union (no Field(discriminator=...)): pydantic renders
+# that as JSON Schema "oneOf" + "discriminator", which OpenAI's Structured
+# Outputs API rejects outright ("'oneOf' is not permitted") - confirmed via a
+# real 400 from the API, not just local schema generation. A plain union
+# renders as "anyOf" instead, which OpenAI does accept, and pydantic's own
+# "smart" union validation still matches each variant correctly via its
+# `op` Literal tag - discriminator or not.
+Op = SetOp | AddItemOp | RemoveItemOp
 
 
 class InterpreterOutput(BaseModel):
