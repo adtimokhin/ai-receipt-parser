@@ -463,6 +463,48 @@ async def test_report_happy_path_sends_a_pdf(
     assert caption is not None and "1" in caption
 
 
+async def test_auto_classified_category_shows_in_the_confirmation_summary(
+    pipeline: ReceiptPipeline, telegram_client: list[dict[str, object]], extractor: FakeExtractor
+) -> None:
+    extractor.result = RawExtraction(
+        merchant_name="Landlord LLC",
+        date="01/05/2026",
+        total=1200.0,
+        items=[RawExtractionItem(name="January rent", price=1200.0)],
+        category="room",
+    )
+    await _set_country()
+
+    await pipeline.handle_document(USER, "file-1", "application/pdf", 1000)
+
+    session = await repository.get_session(USER)
+    assert session.state == SessionState.AWAITING_CONFIRMATION
+    assert "Category: room" in _last_text(telegram_client)
+
+
+async def test_auto_classified_category_is_persisted_and_included_in_a_report(
+    pipeline: ReceiptPipeline, telegram_client: list[dict[str, object]], extractor: FakeExtractor
+) -> None:
+    extractor.result = RawExtraction(
+        merchant_name="Landlord LLC",
+        date="01/05/2026",
+        total=1200.0,
+        items=[RawExtractionItem(name="January rent", price=1200.0)],
+        category="room",
+    )
+    await _set_country()
+
+    await pipeline.handle_document(USER, "file-1", "application/pdf", 1000)
+    await pipeline.handle_command(USER, "/confirm", "")
+
+    receipt = await repository.get_last_receipt(USER)
+    assert receipt is not None
+    assert receipt.category == "room"
+
+    results = await repository.get_categorized_receipts_in_range(USER, "2026-01-01", "2026-01-31")
+    assert [r.merchant_name for r in results] == ["Landlord LLC"]
+
+
 # --- file intake (spec Step 1) -----------------------------------------------
 
 

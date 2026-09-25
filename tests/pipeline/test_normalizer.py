@@ -189,3 +189,36 @@ def test_item_price_uses_the_countrys_decimal_separator() -> None:
     raw = RawExtraction(items=[RawExtractionItem(name="Lait", price="1,15")])
     draft = normalize_extraction(raw, FR)
     assert draft.items[0].price == 1.15
+
+
+# --- category: the extractor's auto-classification guess -----------------------
+
+
+def test_category_room_is_kept() -> None:
+    raw = RawExtraction(category="room")
+    draft = normalize_extraction(raw, US)
+    assert draft.category == "room"
+
+
+def test_category_board_is_kept() -> None:
+    raw = RawExtraction(category="board")
+    draft = normalize_extraction(raw, US)
+    assert draft.category == "board"
+
+
+def test_category_is_case_insensitive() -> None:
+    raw = RawExtraction(category="ROOM")
+    draft = normalize_extraction(raw, US)
+    assert draft.category == "room"
+
+
+def test_category_none_stays_none() -> None:
+    raw = RawExtraction(category=None)
+    draft = normalize_extraction(raw, US)
+    assert draft.category is None
+
+
+def test_unrecognized_category_is_dropped_not_guessed() -> None:
+    raw = RawExtraction(category="restaurant")
+    draft = normalize_extraction(raw, US)
+    assert draft.category is None

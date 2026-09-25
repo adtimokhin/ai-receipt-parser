@@ -108,6 +108,20 @@ class RawExtraction(BaseModel):
             "discounts. Null if it cannot be determined - never guessed."
         ),
     )
+    category: str | None = Field(
+        default=None,
+        description=(
+            "Your best guess at whether this receipt is a qualified IRS Section "
+            "529 education expense, based on the merchant name and the items "
+            "purchased (this is inferred - it is not printed on the receipt). "
+            "Exactly 'room' for rent, a dorm, or apartment/housing charges. "
+            "Exactly 'board' for groceries or a meal plan meant for personal "
+            "meals - a grocery store or supermarket is 'board'. Null for a "
+            "restaurant, cafe, bar, or any alcohol purchase - those do NOT "
+            "qualify even though they involve food. Null for anything else "
+            "that isn't clearly rent or groceries/a meal plan."
+        ),
+    )
 
 
 class ExtractionFailed(Exception):

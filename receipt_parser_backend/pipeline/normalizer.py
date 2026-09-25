@@ -27,6 +27,7 @@ _DATE_TOKEN_RE = re.compile(r"\d+")
 _DATE_FORMAT_FIELD_RE = re.compile(r"[A-Za-z]+")
 _DATE_FIELD_NAMES = {"M": "month", "D": "day", "Y": "year"}
 _TIME_RE = re.compile(r"(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?")
+_CATEGORIES = {"room", "board"}
 
 
 def normalize_extraction(raw: RawExtraction, profile: CountryProfile) -> Draft:
@@ -49,7 +50,17 @@ def normalize_extraction(raw: RawExtraction, profile: CountryProfile) -> Draft:
         tax=_parse_number(raw.tax, profile),
         total=total,
         total_source="extracted" if total is not None else None,
+        category=_normalize_category(raw.category),
     )
+
+
+def _normalize_category(raw_category: str | None) -> str | None:
+    """Keep the extractor's guess only if it's exactly 'room' or 'board' (never guessed further)."""
+
+    if raw_category is None:
+        return None
+    lowered = raw_category.strip().lower()
+    return lowered if lowered in _CATEGORIES else None
 
 
 def _clean_text(value: str | None) -> str | None:
