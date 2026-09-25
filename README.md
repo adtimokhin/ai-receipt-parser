@@ -35,8 +35,9 @@ All settings are environment variables with an `APP_` prefix (see
   `X-Telegram-Bot-Api-Secret-Token` header on every incoming update.
 - `APP_TELEGRAM_WHITELIST` - comma-separated Telegram user IDs allowed to use
   the bot. Updates from anyone else are dropped (spec 4.1).
-- `APP_LLAMAEXTRACT_*` - LlamaExtract credentials used for receipt extraction
-  (spec 9.1). Jobs are submitted with `do_not_cache=True` so files are never
+- `APP_LLAMAEXTRACT_API_KEY` - LlamaCloud credentials used for receipt
+  extraction (spec 9.1). Jobs are submitted with `disable_cache=True`, and the
+  uploaded file is explicitly deleted once the job finishes, so nothing is
   retained on LlamaCloud (design rule 6).
 
 ## Country profiles
@@ -50,8 +51,19 @@ Section 5, design rule 5).
 
 ## Telegram bot setup
 
-Webhook registration and the ingress endpoint land in a later milestone; this
-section will document `setWebhook` and secret-token setup once they exist.
+The webhook endpoint is `POST /telegram/webhook`. Once the service is
+deployed at a public HTTPS URL, register it with Telegram, passing the same
+value as `APP_TELEGRAM_WEBHOOK_SECRET`:
+
+```bash
+curl "https://api.telegram.org/bot<APP_TELEGRAM_BOT_TOKEN>/setWebhook" \
+  -d "url=https://<your-domain>/telegram/webhook" \
+  -d "secret_token=<APP_TELEGRAM_WEBHOOK_SECRET>"
+```
+
+Telegram sends that secret back on every update as the
+`X-Telegram-Bot-Api-Secret-Token` header; the webhook rejects anything that
+doesn't match with a 401.
 
 ## Run
 

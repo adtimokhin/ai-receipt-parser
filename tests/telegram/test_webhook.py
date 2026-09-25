@@ -142,3 +142,26 @@ def test_malformed_payload_is_acknowledged_without_error(
         headers={_SECRET_HEADER: _SECRET},
     )
     assert response.status_code == 200
+
+
+def test_end_to_end_wiring_produces_a_real_reply(
+    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient,
+    telegram_client: list[dict[str, object]],
+    fake_repository_db: object,
+) -> None:
+    """No monkeypatched handlers here - proves webhook -> dispatch -> the real
+    state machine -> a sent Telegram message all actually wire together."""
+
+    _configure(monkeypatch)
+
+    response = client.post(
+        "/telegram/webhook",
+        json=_update(1, _WHITELISTED_USER, "/start"),
+        headers={_SECRET_HEADER: _SECRET},
+    )
+
+    assert response.status_code == 200
+    assert len(telegram_client) == 1
+    assert telegram_client[0]["chat_id"] == _WHITELISTED_USER
+    assert "receipt" in str(telegram_client[0]["text"]).lower()

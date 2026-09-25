@@ -85,6 +85,38 @@ STARTUP_HOOKS.append(_blob_storage_startup)
 SHUTDOWN_HOOKS.append(_blob_storage_shutdown)
 
 
+async def _telegram_startup(app: FastAPI) -> None:
+    from receipt_parser_backend.telegram.client import init_client
+
+    app.state.telegram = init_client()
+
+
+async def _telegram_shutdown(app: FastAPI) -> None:
+    from receipt_parser_backend.telegram.client import close_client
+
+    await close_client()
+
+
+STARTUP_HOOKS.append(_telegram_startup)
+SHUTDOWN_HOOKS.append(_telegram_shutdown)
+
+
+async def _llamaextract_startup(app: FastAPI) -> None:
+    from receipt_parser_backend.llamaextract.client import init_client
+
+    app.state.llamaextract = init_client()
+
+
+async def _llamaextract_shutdown(app: FastAPI) -> None:
+    from receipt_parser_backend.llamaextract.client import close_client
+
+    await close_client()
+
+
+STARTUP_HOOKS.append(_llamaextract_startup)
+SHUTDOWN_HOOKS.append(_llamaextract_shutdown)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Run overlay startup hooks, serve, then run shutdown hooks in reverse."""

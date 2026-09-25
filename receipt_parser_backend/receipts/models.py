@@ -1,10 +1,10 @@
 """Domain models for sessions, user settings, and receipts (spec Section 4).
 
-Pure data shapes only. The state machine (Milestone 3), normalizer/validator
-(Milestone 4), and persistence (Milestone 6) build behavior on top of these;
-nothing here owns pipeline logic. ``draft`` and ``raw_extraction`` stay as
-untyped documents, matching the spec's own placeholder shape, until the
-normalizer/validator milestone fixes what a draft actually looks like.
+Pure data shapes only; behavior lives in ``receipt_parser_backend.pipeline``
+and ``receipt_parser_backend.sessions``. ``raw_extraction`` stays an untyped
+document (it's the AI's own output, defined precisely in
+``receipt_parser_backend.ai.extraction.RawExtraction``); ``Draft`` is the
+typed, normalized shape the pipeline actually works with.
 """
 
 from __future__ import annotations
@@ -42,22 +42,6 @@ class R2Keys(BaseModel):
     preprocessed: str | None = None
 
 
-class Session(BaseModel):
-    """One session per whitelisted user (spec 4.3)."""
-
-    telegram_user_id: int
-    state: SessionState = SessionState.IDLE
-    country_code: str | None = None
-    draft: Document = Field(default_factory=dict)
-    raw_extraction: Document = Field(default_factory=dict)
-    question_queue: list[str] = Field(default_factory=list)
-    current_question: str | None = None
-    extraction_job_id: str | None = None
-    cancelled: bool = False
-    r2_keys: R2Keys = Field(default_factory=R2Keys)
-    updated_at: datetime
-
-
 class Item(BaseModel):
     """A single line item on a receipt."""
 
@@ -66,12 +50,63 @@ class Item(BaseModel):
 
 
 class TotalCheck(BaseModel):
-    """Result of the country-aware total check (spec 8, 8.1)."""
+    """Result of the country-aware total check (spec 8, 8.1).
 
-    status: Literal["match", "user_override"]
+    ``mismatch`` is an internal, unresolved state used only on a working
+    ``Draft`` while the ``total_mismatch`` question is queued - it means the
+    numbers don't reconcile and the user hasn't answered yet. A persisted
+    :class:`Receipt` never carries it: by the time a draft reaches
+    ``AWAITING_CONFIRMATION`` (and can be ``/confirm``-ed), every question
+    including ``total_mismatch`` has been resolved to ``match`` or
+    ``user_override``.
+    """
+
+    status: Literal["match", "user_override", "mismatch"]
     item_sum: float
     expected_total: float
     difference: float
+
+
+class Draft(BaseModel):
+    """The typed, normalized receipt-in-progress (spec Section 8, Step 4 output).
+
+    Milestone 3's normalizer produces one of these directly from an
+    already-clean fake extraction; Milestone 4 hardens the path from raw,
+    country-formatted extraction text to this shape.
+    """
+
+    merchant_name: str | None = None
+    currency: str
+    date: str | None = None
+    time: str | None = None
+    items: list[Item] = Field(default_factory=list)
+    discounts: float | None = None
+    tax: float | None = None
+    total: float | None = None
+    total_source: Literal["extracted", "user"] | None = None
+    total_check: TotalCheck | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class Session(BaseModel):
+    """One session per whitelisted user (spec 4.3)."""
+
+    telegram_user_id: int
+    state: SessionState = SessionState.IDLE
+    country_code: str | None = None
+    draft: Draft | None = None
+    raw_extraction: Document = Field(default_factory=dict)
+    question_queue: list[str] = Field(default_factory=list)
+    current_question: str | None = None
+    extraction_job_id: str | None = None
+    cancelled: bool = False
+    r2_keys: R2Keys = Field(default_factory=R2Keys)
+    # Not part of spec 4.3; a minimal stand-in for the confirmation prompt
+    # /undo requires, since Section 7 has no state to model it in (see
+    # Milestone 3 deviations). Cleared on any input other than a repeated
+    # /undo while it's set.
+    pending_action: Literal["undo"] | None = None
+    updated_at: datetime
 
 
 class ReceiptFiles(BaseModel):

@@ -773,6 +773,15 @@ wheels = [
 ]
 
 [[package]]
+name = "distro"
+version = "1.9.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fc/f8/98eea607f65de6527f8a2e8885fc8015d3e6f5775df186e443e0964a11c3/distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed", size = 60722, upload-time = "2023-12-24T09:54:32.31Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2", size = 20277, upload-time = "2023-12-24T09:54:30.421Z" },
+]
+
+[[package]]
 name = "dnspython"
 version = "2.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1441,6 +1450,23 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/6c/f0/89eb11dffbe9279ff37144dec786927314502ae0b114f1449dc78c458aab/librt-0.15.0-cp315-cp315t-win32.whl", hash = "sha256:c16d15ee371643ab48dc8248a3e680ebbeca573a13af2c3dd0c985b142d77162", size = 104313, upload-time = "2026-08-07T10:49:12.305Z" },
     { url = "https://files.pythonhosted.org/packages/6d/4a/1f1978c200f563beda63c36adff2d65bbecb81e365e8e69e572f5f70fbc6/librt-0.15.0-cp315-cp315t-win_amd64.whl", hash = "sha256:dbd605739f228912dc49027cb764456b9757750bdc2b6b7773164db7096c6fd1", size = 126889, upload-time = "2026-08-07T10:49:13.881Z" },
     { url = "https://files.pythonhosted.org/packages/38/a6/800800bfed7b1fb10fc3f3d557785c3854e80d3f7a9800d784b176a1fc2d/librt-0.15.0-cp315-cp315t-win_arm64.whl", hash = "sha256:84d244b00604d17df3fc7736c327892d6bba66181254aa4087be807b6c342bdc", size = 110700, upload-time = "2026-08-07T10:49:15.499Z" },
+]
+
+[[package]]
+name = "llama-cloud"
+version = "2.16.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "distro" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f2/23/6723b40183322124ae1825185b1831bdbf12d41deb75007022934220511c/llama_cloud-2.16.0.tar.gz", hash = "sha256:248ddc6a6b3945e587f8f79695550f8f4c91ec6cddf8e0513c6d712a3a3ac79a", size = 3579829, upload-time = "2026-09-08T23:12:17.613Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/06/da/3fdf1fb5c1017d4bd4aeb0d8e213c3fe72181f52b233cdc174a41a79fc28/llama_cloud-2.16.0-py3-none-any.whl", hash = "sha256:9ab6bc8e53811e462a1b6251c1c794265bea25050d65a2c351eb1a47689c878e", size = 483664, upload-time = "2026-09-08T23:12:15.336Z" },
 ]
 
 [[package]]
@@ -2354,6 +2380,8 @@ dependencies = [
     { name = "aioboto3" },
     { name = "fastapi" },
     { name = "fastapi-cli" },
+    { name = "httpx" },
+    { name = "llama-cloud" },
     { name = "openai" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -2365,7 +2393,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "moto", extra = ["server"] },
     { name = "mypy" },
     { name = "pre-commit" },
@@ -2380,6 +2407,8 @@ requires-dist = [
     { name = "aioboto3", specifier = "==15.5.0" },
     { name = "fastapi", specifier = "==0.141.1" },
     { name = "fastapi-cli", specifier = "==0.0.32" },
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "llama-cloud", specifier = "==2.16.0" },
     { name = "openai", specifier = "==3.8.0" },
     { name = "pydantic", specifier = "==2.13.5" },
     { name = "pydantic-settings", specifier = "==2.15.0" },
@@ -2391,7 +2420,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = "==0.28.1" },
     { name = "moto", extras = ["server"], specifier = "==5.2.3" },
     { name = "mypy", specifier = "==2.3.1" },
     { name = "pre-commit", specifier = "==4.3.0" },

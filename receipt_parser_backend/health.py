@@ -98,6 +98,52 @@ async def check_blob_storage() -> HealthResult:
 READINESS_CHECKS.append(check_blob_storage)
 
 
+async def check_telegram() -> HealthResult:
+    """Readiness probe: the client is built and a bot token is configured.
+
+    No network round-trip - matches ``check_llm_openai``'s reasoning.
+    """
+    from receipt_parser_backend.config import get_settings
+    from receipt_parser_backend.telegram.client import get_client
+
+    try:
+        get_client()
+    except RuntimeError as exc:  # lifespan has not run
+        return HealthResult(name="telegram", healthy=False, detail=repr(exc))
+    configured = bool(get_settings().telegram_bot_token)
+    return HealthResult(
+        name="telegram",
+        healthy=configured,
+        detail="bot token configured" if configured else "APP_TELEGRAM_BOT_TOKEN is empty",
+    )
+
+
+READINESS_CHECKS.append(check_telegram)
+
+
+async def check_llamaextract() -> HealthResult:
+    """Readiness probe: the client is built and an API key is configured.
+
+    No network round-trip - matches ``check_llm_openai``'s reasoning.
+    """
+    from receipt_parser_backend.config import get_settings
+    from receipt_parser_backend.llamaextract.client import get_client
+
+    try:
+        get_client()
+    except RuntimeError as exc:  # lifespan has not run
+        return HealthResult(name="llamaextract", healthy=False, detail=repr(exc))
+    configured = bool(get_settings().llamaextract_api_key)
+    return HealthResult(
+        name="llamaextract",
+        healthy=configured,
+        detail="api key configured" if configured else "APP_LLAMAEXTRACT_API_KEY is empty",
+    )
+
+
+READINESS_CHECKS.append(check_llamaextract)
+
+
 async def _run_check(check: ReadinessCheck) -> HealthResult:
     try:
         return await check()

@@ -55,8 +55,9 @@ class Settings(BaseSettings):
     telegram_whitelist: str = ""
 
     # --- llamaextract ------------------------------------------------------------
+    # The current llama-cloud SDK takes schema/prompt inline per extract.create()
+    # call (spec 9.1) - no persistent extraction agent to configure.
     llamaextract_api_key: str
-    llamaextract_agent_name: str = "receipt-parser"
 
     @property
     def telegram_whitelist_ids(self) -> list[int]:
