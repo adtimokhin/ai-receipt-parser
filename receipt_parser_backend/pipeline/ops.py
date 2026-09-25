@@ -21,8 +21,8 @@ from receipt_parser_backend.ai.interpreter import (
 from receipt_parser_backend.receipts.models import Draft, Item, SessionState
 
 ALLOWED_INTENTS_BY_STATE: dict[SessionState, frozenset[str]] = {
-    SessionState.AWAITING_ANSWERS: frozenset({"answer", "accept_total", "unclear"}),
-    SessionState.AWAITING_CONFIRMATION: frozenset({"confirm", "edit", "unclear"}),
+    SessionState.AWAITING_ANSWERS: frozenset({"answer", "accept_total", "query", "unclear"}),
+    SessionState.AWAITING_CONFIRMATION: frozenset({"confirm", "edit", "query", "unclear"}),
 }
 
 _ITEM_PATH_RE = re.compile(r"^items\[(\d+)\]\.(name|price)$")

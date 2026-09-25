@@ -17,9 +17,11 @@ from typing import Any
 
 import structlog
 
+from receipt_parser_backend.ai.answer import AnswerPort
 from receipt_parser_backend.ai.extraction import ALLOWED_MIME_TYPES, ExtractionFailed, ExtractorPort
 from receipt_parser_backend.ai.interpreter import InterpreterOutput, InterpreterPort, SetOp
 from receipt_parser_backend.ai.llamaextract_extractor import LlamaExtractExtractor
+from receipt_parser_backend.ai.openai_answer_agent import OpenAIAnswerAgent
 from receipt_parser_backend.ai.openai_interpreter import OpenAIInterpreter
 from receipt_parser_backend.blob_storage.client import upload_bytes
 from receipt_parser_backend.countries import CountryProfile, get_profile
@@ -108,12 +110,14 @@ class ReceiptPipeline:
         self,
         extractor: ExtractorPort,
         interpreter: InterpreterPort,
+        answer_agent: AnswerPort,
         *,
         extraction_poll_interval_seconds: float = _DEFAULT_EXTRACTION_POLL_INTERVAL_SECONDS,
         extraction_timeout_seconds: float = _DEFAULT_EXTRACTION_TIMEOUT_SECONDS,
     ) -> None:
         self._extractor = extractor
         self._interpreter = interpreter
+        self._answer_agent = answer_agent
         self._extraction_poll_interval_seconds = extraction_poll_interval_seconds
         self._extraction_timeout_seconds = extraction_timeout_seconds
         # asyncio only holds a weak reference to a scheduled task; this set is
@@ -436,8 +440,21 @@ class ReceiptPipeline:
             # Spec 8.1, bullet 2: the user accepts the mismatch as-is.
             self._accept_total_override(session.draft, profile)
             await self._revalidate_and_transition(user_id, session)
+        elif validated.intent == "query":
+            await self._answer_query(user_id, session.draft, profile, text)
         else:
             await self._reply(user_id, question_text(session.current_question, session.draft))
+
+    async def _answer_query(
+        self, user_id: int, draft: Draft, profile: CountryProfile, question: str
+    ) -> None:
+        """Read-only Q&A (the third AI touchpoint - see ai/answer.py). No
+        state change, no draft mutation - just a reply."""
+
+        answer = await self._answer_agent.answer(
+            draft=draft, question=question, country_instructions=profile.interpreter_prompt
+        )
+        await self._reply(user_id, answer)
 
     def _set_total_from_user_answer(self, draft: Draft, profile: CountryProfile) -> None:
         check = compute_total_check(draft, profile)
@@ -496,6 +513,8 @@ class ReceiptPipeline:
         elif validated.intent == "edit":
             session.draft = apply_ops(session.draft, validated.ops)
             await self._revalidate_and_transition(user_id, session)
+        elif validated.intent == "query":
+            await self._answer_query(user_id, session.draft, profile, text)
         else:
             await self._reply(user_id, messages.UNCLEAR_CONFIRMATION)
 
@@ -589,5 +608,7 @@ def _receipt_as_draft(receipt: Receipt) -> Draft:
 
 
 default_pipeline = ReceiptPipeline(
-    extractor=LlamaExtractExtractor(), interpreter=OpenAIInterpreter()
+    extractor=LlamaExtractExtractor(),
+    interpreter=OpenAIInterpreter(),
+    answer_agent=OpenAIAnswerAgent(),
 )

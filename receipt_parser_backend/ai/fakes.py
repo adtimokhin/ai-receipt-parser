@@ -1,9 +1,10 @@
-"""In-memory stand-ins for the two AI touchpoints (spec 9.1, 9.2).
+"""In-memory stand-ins for the AI touchpoints (spec 9.1, 9.2, and the answer agent).
 
-The app now uses the real ``OpenAIInterpreter`` (Milestone 5) and
-``LlamaExtractExtractor`` (Milestone 6) behind the same
-``InterpreterPort``/``ExtractorPort`` contracts. Both fakes here remain the
-test doubles for everything that shouldn't depend on a real API call.
+The app now uses the real ``OpenAIInterpreter`` (Milestone 5),
+``LlamaExtractExtractor`` (Milestone 6), and ``OpenAIAnswerAgent`` behind the
+same ``InterpreterPort``/``ExtractorPort``/``AnswerPort`` contracts. The fakes
+here remain the test doubles for everything that shouldn't depend on a real
+API call.
 """
 
 from __future__ import annotations
@@ -74,4 +75,20 @@ class FakeInterpreter:
         user_text: str,
     ) -> InterpreterOutput:
         self.calls.append(user_text)
+        return self.response
+
+
+class FakeAnswerAgent:
+    """Returns a fixed, configurable answer for every question.
+
+    Defaults to a canned sentence; tests set ``response`` to whatever text
+    they want to assert on.
+    """
+
+    def __init__(self, response: str = "That's a fake answer.") -> None:
+        self.response = response
+        self.calls: list[str] = []
+
+    async def answer(self, *, draft: Draft, question: str, country_instructions: str) -> str:
+        self.calls.append(question)
         return self.response

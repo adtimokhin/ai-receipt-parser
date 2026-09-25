@@ -57,6 +57,16 @@ def test_unclear_intent_is_allowed_in_every_state() -> None:
         )
 
 
+def test_query_intent_is_allowed_in_every_state_and_carries_no_ops() -> None:
+    output = InterpreterOutput(intent="query")
+    for state in (SessionState.AWAITING_ANSWERS, SessionState.AWAITING_CONFIRMATION):
+        result = validate_interpreter_output(
+            output, state=state, active_question=None, item_count=0
+        )
+        assert result.intent == "query"
+        assert result.ops == []
+
+
 # --- accept_total is only valid for the total_mismatch question ------------
 
 

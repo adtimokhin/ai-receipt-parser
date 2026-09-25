@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 import pytest
 
 from receipt_parser_backend.ai.extraction import RawExtraction, RawExtractionItem
-from receipt_parser_backend.ai.fakes import FakeExtractor, FakeInterpreter
+from receipt_parser_backend.ai.fakes import FakeAnswerAgent, FakeExtractor, FakeInterpreter
 from receipt_parser_backend.ai.interpreter import InterpreterOutput, SetOp
 from receipt_parser_backend.pipeline import messages
 from receipt_parser_backend.pipeline.engine import ReceiptPipeline
@@ -38,10 +38,18 @@ def interpreter() -> FakeInterpreter:
 
 
 @pytest.fixture
+def answer_agent() -> FakeAnswerAgent:
+    return FakeAnswerAgent()
+
+
+@pytest.fixture
 def pipeline(
-    fake_repository_db: object, extractor: FakeExtractor, interpreter: FakeInterpreter
+    fake_repository_db: object,
+    extractor: FakeExtractor,
+    interpreter: FakeInterpreter,
+    answer_agent: FakeAnswerAgent,
 ) -> ReceiptPipeline:
-    return ReceiptPipeline(extractor=extractor, interpreter=interpreter)
+    return ReceiptPipeline(extractor=extractor, interpreter=interpreter, answer_agent=answer_agent)
 
 
 def _last_text(sent: list[dict[str, object]]) -> str:
@@ -882,6 +890,7 @@ async def test_background_polling_completes_once_the_job_resolves(
     pipeline = ReceiptPipeline(
         extractor=extractor,
         interpreter=FakeInterpreter(),
+        answer_agent=FakeAnswerAgent(),
         extraction_poll_interval_seconds=0.01,
         extraction_timeout_seconds=1.0,
     )
@@ -902,6 +911,7 @@ async def test_background_polling_times_out_and_returns_to_idle(
     pipeline = ReceiptPipeline(
         extractor=extractor,
         interpreter=FakeInterpreter(),
+        answer_agent=FakeAnswerAgent(),
         extraction_poll_interval_seconds=0.01,
         extraction_timeout_seconds=0.03,
     )
@@ -922,6 +932,7 @@ async def test_cancel_during_processing_stops_background_polling(
     pipeline = ReceiptPipeline(
         extractor=extractor,
         interpreter=FakeInterpreter(),
+        answer_agent=FakeAnswerAgent(),
         extraction_poll_interval_seconds=0.01,
         extraction_timeout_seconds=10.0,
     )
@@ -934,3 +945,54 @@ async def test_cancel_during_processing_stops_background_polling(
     session = await repository.get_session(USER)
     assert session.state == SessionState.IDLE
     assert session.cancelled is True
+
+
+# --- read-only Q&A (a third AI touchpoint, on top of spec 9.1/9.2) ------------
+
+
+async def test_query_during_awaiting_answers_replies_without_changing_anything(
+    pipeline: ReceiptPipeline,
+    telegram_client: list[dict[str, object]],
+    interpreter: FakeInterpreter,
+    answer_agent: FakeAnswerAgent,
+) -> None:
+    draft = Draft(currency="USD", date=None, total=10.0, items=[Item(name="a", price=10.0)])
+    await _put_session(
+        state=SessionState.AWAITING_ANSWERS,
+        country_code="US",
+        draft=draft,
+        current_question="missing_date",
+        question_queue=["missing_date"],
+    )
+    interpreter.response = InterpreterOutput(intent="query")
+    answer_agent.response = "You've spent 10.00 USD so far."
+
+    await pipeline.handle_text(USER, "how much have I spent so far?")
+
+    assert _last_text(telegram_client) == "You've spent 10.00 USD so far."
+    assert answer_agent.calls == ["how much have I spent so far?"]
+    session = await repository.get_session(USER)
+    assert session.state == SessionState.AWAITING_ANSWERS
+    assert session.current_question == "missing_date"
+    assert session.draft is not None
+    assert session.draft.date is None  # untouched
+
+
+async def test_query_during_awaiting_confirmation_replies_without_changing_anything(
+    pipeline: ReceiptPipeline,
+    telegram_client: list[dict[str, object]],
+    interpreter: FakeInterpreter,
+    answer_agent: FakeAnswerAgent,
+) -> None:
+    draft = Draft(currency="USD", merchant_name="Fake Mart", date="2026-01-15", total=10.0)
+    await _put_session(state=SessionState.AWAITING_CONFIRMATION, country_code="US", draft=draft)
+    interpreter.response = InterpreterOutput(intent="query")
+    answer_agent.response = "The merchant is Fake Mart."
+
+    await pipeline.handle_text(USER, "which store was this?")
+
+    assert _last_text(telegram_client) == "The merchant is Fake Mart."
+    session = await repository.get_session(USER)
+    assert session.state == SessionState.AWAITING_CONFIRMATION
+    assert session.draft is not None
+    assert session.draft.merchant_name == "Fake Mart"

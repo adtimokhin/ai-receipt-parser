@@ -19,6 +19,7 @@ from openai import APIConnectionError, RateLimitError
 from openai.types.chat import ChatCompletionMessageParam
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from receipt_parser_backend.ai.draft_context import render_draft_for_prompt
 from receipt_parser_backend.ai.interpreter import InterpreterOutput
 from receipt_parser_backend.config import get_settings
 from receipt_parser_backend.llm.openai.client import get_client
@@ -36,12 +37,21 @@ Allowed intents depend on the current state:
 - AWAITING_ANSWERS: "answer" (the user is answering the active question, or \
 otherwise supplying/correcting a field), "accept_total" (only when the \
 active question is total_mismatch, and the user says the total shown is \
-correct as-is despite not matching the items), "unclear" (anything that \
-doesn't clearly fit either).
+correct as-is despite not matching the items), "query" (see below), \
+"unclear" (anything that doesn't clearly fit either).
 - AWAITING_CONFIRMATION: "confirm" (the user accepts the receipt as shown), \
-"edit" (the user wants to change a field), "unclear" (anything that doesn't \
-clearly fit either).
+"edit" (the user wants to change a field), "query" (see below), "unclear" \
+(anything that doesn't clearly fit either).
 If you are not confident, use "unclear" rather than guessing.
+
+Use "query" when the user is asking a question about the receipt's current \
+data rather than trying to change or confirm anything - e.g. "what's the \
+total", "how much did I spend on X", "is there a discount here", "what was \
+the second item". "query" never carries ops; a separate step answers it \
+directly from the current draft. If a message is ambiguous between "explain \
+this to me" and "change this", prefer "query" only when there's no concrete \
+new value being given - "why is the total wrong" is a query, "the total is \
+actually $12" is an answer/edit.
 
 If the active question asks for a missing item's price and the user instead \
 says that item isn't real - "discard it", "remove it", "delete that line", \
@@ -148,35 +158,9 @@ def _user_message(
         f"State: {state.value}\n"
         f"Active question: {_render_active_question(active_question, draft)}\n"
         f"Country instructions: {interpreter_prompt}\n"
-        f"Current draft:\n{_render_draft(draft)}\n"
+        f"Current draft:\n{render_draft_for_prompt(draft)}\n"
         f"User's reply: {user_text}"
     )
-
-
-def _render_draft(draft: Draft) -> str:
-    """Draft fields plus an explicitly indexed item list.
-
-    Items are rendered as "index: name - price", not a bare JSON array: the
-    model needs the item's exact index for any op, and making it count array
-    positions itself (the raw JSON dump this used to send) was unreliable
-    once there were more than a couple of items - it would silently give up
-    (intent "unclear") rather than risk a wrong index.
-    """
-
-    lines = [
-        f"merchant_name: {draft.merchant_name!r}",
-        f"currency: {draft.currency!r}",
-        f"date: {draft.date!r}",
-        f"time: {draft.time!r}",
-        f"discounts: {draft.discounts!r}",
-        f"tax: {draft.tax!r}",
-        f"total: {draft.total!r}",
-        "items (index: name - price):",
-    ]
-    for index, item in enumerate(draft.items):
-        price = "null" if item.price is None else f"{item.price} {draft.currency}"
-        lines.append(f"  {index}: {item.name!r} - {price}")
-    return "\n".join(lines)
 
 
 def _render_active_question(active_question: str | None, draft: Draft) -> str:

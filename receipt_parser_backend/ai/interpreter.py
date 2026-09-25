@@ -80,7 +80,7 @@ Op = SetOp | AddItemOp | RemoveItemOp
 class InterpreterOutput(BaseModel):
     """Interpreter output schema (spec 9.2). Untrusted until validated."""
 
-    intent: Literal["answer", "accept_total", "confirm", "edit", "unclear"] = Field(
+    intent: Literal["answer", "accept_total", "confirm", "edit", "query", "unclear"] = Field(
         description=(
             "What the user's reply means. 'answer' supplies a missing value or "
             "corrects a field while a question is active (spec Step 6). "
@@ -88,8 +88,10 @@ class InterpreterOutput(BaseModel):
             "only meaningful when the active question is total_mismatch. "
             "'confirm' and 'edit' apply only during final review (spec Step 7): "
             "'confirm' accepts the receipt as shown, 'edit' changes a field on "
-            "it. 'unclear' means the reply doesn't map to any of the above - "
-            "use it rather than guessing."
+            "it. 'query' means the user is asking a question about the current "
+            "data rather than changing or confirming anything - it never carries "
+            "ops; a separate step answers it directly. 'unclear' means the reply "
+            "doesn't map to any of the above - use it rather than guessing."
         )
     )
     ops: list[Op] = Field(
