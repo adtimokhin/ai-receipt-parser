@@ -1,0 +1,32 @@
+# Mirrors .gitignore: none of this should end up in the build context, and
+# .env in particular must never be baked into an image layer.
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtualenv
+.venv/
+
+# Environment
+.env
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# VCS and local-only files
+.git/
+.github/
+.claude/

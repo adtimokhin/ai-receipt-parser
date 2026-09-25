@@ -11,15 +11,14 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app
 
 # Dependency layer: cached until the lock or project metadata changes.
-# No cache mount for uv's own download cache: Railway's builder requires
-# cache mount ids scoped to its own service id, which would hardcode a
-# Railway-specific value into a Dockerfile that also has to work for plain
-# `docker build`/docker-compose. The lockfile-based layer caching below is
-# unaffected; this only makes a from-scratch build re-download packages
-# instead of reusing a persistent uv cache.
-RUN --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project --no-dev
+# Plain COPY, not --mount=type=bind/cache: Railway's Dockerfile builder only
+# supports a restricted subset of BuildKit mount syntax, and this Dockerfile
+# also has to work for plain `docker build`/docker-compose. COPY here still
+# keeps this layer cached separately from the full source (invalidated only
+# when uv.lock/pyproject.toml change) - `COPY . /app` below overwrites these
+# same two files with identical content, so there's no duplication cost.
+COPY uv.lock pyproject.toml ./
+RUN uv sync --locked --no-install-project --no-dev
 
 COPY . /app
 RUN uv sync --locked --no-dev
