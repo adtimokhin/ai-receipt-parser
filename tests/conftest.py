@@ -215,6 +215,9 @@ async def blob_storage_client(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
     endpoint_url = f"http://{host}:{port}"
 
     monkeypatch.setenv("APP_BLOB_STORAGE_ENDPOINT_URL", endpoint_url)
+    # Pinned regardless of a developer's local .env (e.g. a real R2 "auto"
+    # region): moto validates this as a real AWS region and rejects "auto".
+    monkeypatch.setenv("APP_BLOB_STORAGE_REGION", "us-east-1")
     get_settings.cache_clear()
     # So tests that call the pipeline directly (no app lifespan) still get a
     # session and an existing bucket - matches the telegram_client fixture's

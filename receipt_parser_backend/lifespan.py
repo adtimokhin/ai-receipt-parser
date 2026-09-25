@@ -86,9 +86,15 @@ SHUTDOWN_HOOKS.append(_blob_storage_shutdown)
 
 
 async def _telegram_startup(app: FastAPI) -> None:
-    from receipt_parser_backend.telegram.client import init_client
+    import structlog
+
+    from receipt_parser_backend.telegram.client import init_client, set_my_commands
 
     app.state.telegram = init_client()
+    try:
+        await set_my_commands()
+    except Exception as exc:  # bootstrap is best-effort; a stale/missing menu isn't fatal
+        structlog.get_logger(__name__).warning("telegram.set_my_commands_failed", error=repr(exc))
 
 
 async def _telegram_shutdown(app: FastAPI) -> None:

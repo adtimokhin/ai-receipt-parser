@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from receipt_parser_backend.telegram.client import download_file
@@ -41,3 +43,50 @@ async def test_download_file_raises_on_http_error(
 
     with pytest.raises(httpx.HTTPStatusError):
         await download_file("some-file-id")
+
+
+async def test_set_my_commands_sends_the_full_command_list(
+    telegram_client: list[dict[str, object]],
+) -> None:
+    import httpx
+
+    from receipt_parser_backend.telegram import client as client_mod
+    from receipt_parser_backend.telegram.client import BOT_COMMANDS, set_my_commands
+
+    captured: list[httpx.Request] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json={"ok": True, "result": True})
+
+    client_mod._client = httpx.AsyncClient(
+        base_url="https://api.telegram.org/bottest-token", transport=httpx.MockTransport(_handler)
+    )
+
+    await set_my_commands()
+
+    assert len(captured) == 1
+    assert captured[0].url.path.endswith("/setMyCommands")
+    body = json.loads(captured[0].content)
+    assert body["commands"] == [
+        {"command": name, "description": desc} for name, desc in BOT_COMMANDS
+    ]
+
+
+async def test_set_my_commands_raises_on_http_error(
+    telegram_client: list[dict[str, object]],
+) -> None:
+    import httpx
+
+    from receipt_parser_backend.telegram import client as client_mod
+    from receipt_parser_backend.telegram.client import set_my_commands
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"ok": False, "description": "bad request"})
+
+    client_mod._client = httpx.AsyncClient(
+        base_url="https://api.telegram.org/bottest-token", transport=httpx.MockTransport(_handler)
+    )
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await set_my_commands()

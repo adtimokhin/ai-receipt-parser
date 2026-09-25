@@ -67,3 +67,27 @@ async def download_file(file_id: str) -> bytes:
     file_response = await client.get(file_url)
     file_response.raise_for_status()
     return file_response.content
+
+
+# The "/" menu Telegram clients show next to the message box. Order matches
+# spec Section 6's command table; descriptions are Telegram UI copy, kept
+# separate from messages.HELP_TEXT's fuller sentences.
+BOT_COMMANDS: list[tuple[str, str]] = [
+    ("start", "Greeting and how-to"),
+    ("help", "List every command"),
+    ("country", "Show or set your country"),
+    ("status", "Show the current state and active question"),
+    ("show", "Re-display the current draft"),
+    ("confirm", "Save the current draft"),
+    ("cancel", "Stop processing or discard the draft"),
+    ("last", "Show your most recently saved receipt"),
+    ("undo", "Delete your most recently saved receipt"),
+]
+
+
+async def set_my_commands() -> None:
+    """Populate Telegram's native command menu. Idempotent - safe on every boot."""
+
+    commands = [{"command": name, "description": description} for name, description in BOT_COMMANDS]
+    response = await get_client().post("/setMyCommands", json={"commands": commands})
+    response.raise_for_status()
