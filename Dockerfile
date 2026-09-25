@@ -11,16 +11,18 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app
 
 # Dependency layer: cached until the lock or project metadata changes.
-# id= on the cache mount: some builders (e.g. Railway's) require an explicit
-# id to key their shared build cache; plain `docker build` works either way.
-RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
+# No cache mount for uv's own download cache: Railway's builder requires
+# cache mount ids scoped to its own service id, which would hardcode a
+# Railway-specific value into a Dockerfile that also has to work for plain
+# `docker build`/docker-compose. The lockfile-based layer caching below is
+# unaffected; this only makes a from-scratch build re-download packages
+# instead of reusing a persistent uv cache.
+RUN --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --locked --no-install-project --no-dev
 
 COPY . /app
-RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache \
-    uv sync --locked --no-dev
+RUN uv sync --locked --no-dev
 
 
 FROM python:3.12-slim-bookworm AS runtime
